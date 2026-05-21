@@ -1,0 +1,29 @@
+[project]
+name = "dialog-emo-models"
+version = "0.1.0"
+description = "Training and scoring pipeline contracts for dialogue emotion models"
+readme = "README.md"
+authors = [
+    { name = "Mike", email = "michel200212345+github@gmail.com" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.26,<3",
+    "pandas>=2.3,<3",
+]
+
+[project.scripts]
+dialog-emo = "dialog_emo_models.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.11.7,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "ruff>=0.15.14",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]

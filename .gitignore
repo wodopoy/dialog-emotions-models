@@ -231,3 +231,8 @@ marimo/_lsp/
 __marimo__/
 # Streamlit
 .streamlit/secrets.toml
+
+# Local model outputs
+artifacts/
+runs/
+output/
