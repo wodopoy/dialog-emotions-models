@@ -1,3 +1,5 @@
 """Dialogue emotion modeling package."""
 
-__all__ = []
+from dialog_emo_models.schema import EMOTIONS, FULL_COLUMNS, PARSED_COLUMNS
+
+__all__ = ["EMOTIONS", "FULL_COLUMNS", "PARSED_COLUMNS"]
