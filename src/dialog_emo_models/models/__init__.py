@@ -19,6 +19,10 @@ from dialog_emo_models.models.goemotions import (
     aggregate_goemotions_logits,
     missing_goemotions_labels,
 )
+from dialog_emo_models.models.sklearn_baselines import (
+    TfidfLogRegEmotionModel,
+    TfidfRidgeEmotionModel,
+)
 
 __all__ = [
     "DummyEmotionModel",
@@ -34,6 +38,8 @@ __all__ = [
     "ModelOutputError",
     "SEARA_RUBERT_TINY2_GOEMOTIONS",
     "SearaRuBertTiny2GoEmotionsModel",
+    "TfidfLogRegEmotionModel",
+    "TfidfRidgeEmotionModel",
     "aggregate_goemotions_logits",
     "logits_to_probabilities",
     "missing_goemotions_labels",

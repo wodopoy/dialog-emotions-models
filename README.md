@@ -57,6 +57,24 @@ uv run dialog-emo run \
 
 `output/`, `runs/`, and `artifacts/` are local-only and ignored by git.
 
+Train a lightweight sklearn baseline from a full CSV:
+
+```bash
+uv run dialog-emo train \
+  --input data/train.csv \
+  --output artifacts/ridge-tfidf.joblib \
+  --model ridge-tfidf
+```
+
+Use a saved model for scoring:
+
+```bash
+uv run dialog-emo score \
+  --input output/parsed.csv \
+  --output output/scored.csv \
+  --model-path artifacts/ridge-tfidf.joblib
+```
+
 ## Data Contracts
 
 Parsed CSV, used as model input:
@@ -116,6 +134,24 @@ register_model("my-model", lambda: MyModel())
 
 The `dummy` model returns zero logits and therefore uniform `1/6`
 probabilities.
+
+## Trainable Baselines
+
+Two sklearn baselines are available through `dialog-emo train`:
+
+| training name | model | target handling | when to use |
+| --- | --- | --- | --- |
+| `ridge-tfidf` | char n-gram TF-IDF + `Ridge` | learns log-probabilities from the six soft labels | first default for full CSV labels |
+| `logreg-tfidf` | char n-gram TF-IDF + `LogisticRegression` | trains on the strongest emotion per row | quick hard-label comparison |
+
+`ridge-tfidf` is the recommended first training baseline. It preserves the idea
+that labels are distributions, trains fast on small data, saves as `.joblib`,
+and still satisfies the same `EmotionModel` contract at inference time.
+
+CatBoost is a good next experiment, but it is not in the base dependency set
+yet. The intended shape is the same: train from full CSV, save under
+`artifacts/`, and expose `predict_logits(texts)` so the normal scorer can use
+it.
 
 ## HF GoEmotions Presets
 
