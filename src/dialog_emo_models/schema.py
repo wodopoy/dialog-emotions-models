@@ -45,8 +45,12 @@ def validate_parsed_frame(frame: pd.DataFrame) -> pd.DataFrame:
 
 def validate_full_frame(frame: pd.DataFrame) -> pd.DataFrame:
     _require_columns(frame, FULL_COLUMNS)
-    parsed = validate_parsed_frame(frame.loc[:, PARSED_COLUMNS])
-    emotions = frame.loc[:, EMOTIONS].copy()
+    cleaned = frame.loc[:, FULL_COLUMNS].copy()
+    cleaned["turn_index"] = pd.to_numeric(cleaned["turn_index"], errors="raise").astype(int)
+    cleaned = cleaned.sort_values("turn_index", kind="stable").reset_index(drop=True)
+
+    parsed = validate_parsed_frame(cleaned.loc[:, PARSED_COLUMNS])
+    emotions = cleaned.loc[:, EMOTIONS].copy()
 
     for column in EMOTIONS:
         emotions[column] = pd.to_numeric(emotions[column], errors="raise")
