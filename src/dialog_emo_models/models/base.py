@@ -63,6 +63,8 @@ def validate_logits(
 
 
 def logits_to_probabilities(logits: NDArray[np.float64]) -> NDArray[np.float64]:
+    if logits.shape[0] == 0:
+        return logits.copy()
     shifted = logits - logits.max(axis=1, keepdims=True)
     exps = np.exp(shifted)
     return exps / exps.sum(axis=1, keepdims=True)

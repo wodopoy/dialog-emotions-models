@@ -103,7 +103,7 @@ keeps future models interchangeable:
 
 - sklearn/CatBoost wrappers can vectorize `texts` internally and return
   `(n_texts, 6)` scores.
-- HF zero-shot wrappers can map provider labels into the same six emotions.
+- HF GoEmotions wrappers map provider labels into the same six emotions.
 - Supervised training can read full CSV emotion columns as the label matrix.
 
 Register a model lazily:
@@ -114,5 +114,53 @@ from dialog_emo_models.registry import register_model
 register_model("my-model", lambda: MyModel())
 ```
 
-The v1 registry contains only `dummy`, which returns zero logits and therefore
-uniform `1/6` probabilities.
+The `dummy` model returns zero logits and therefore uniform `1/6`
+probabilities.
+
+## HF GoEmotions Presets
+
+HF models are optional so the base environment stays small. Install the runtime
+deps only when you want to run them:
+
+```bash
+uv add transformers torch
+```
+
+Registered presets:
+
+| registry name | HF model | notes |
+| --- | --- | --- |
+| `hf-seara-rubert-tiny2-goemotions` | `seara/rubert-tiny2-russian-emotion-detection-ru-go-emotions` | lightest first try |
+| `hf-fyaronskiy-deberta-goemotions` | `fyaronskiy/deberta-v1-base-russian-go-emotions` | stronger, still medium-sized |
+| `hf-maxkazak-rubert-base-goemotions` | `MaxKazak/ruBert-base-russian-emotion-detection` | RuBERT-base comparison point |
+
+Run any preset through the normal CLI:
+
+```bash
+uv run dialog-emo run \
+  --input data/result.json \
+  --parsed-output output/parsed.csv \
+  --output output/scored.csv \
+  --model hf-seara-rubert-tiny2-goemotions
+```
+
+The wrappers aggregate GoEmotions labels into the project emotions:
+
+```python
+GOEMOTIONS_GROUPS = {
+    "anxiety": ["fear", "nervousness", "embarrassment"],
+    "anger": ["anger", "annoyance", "disapproval", "disgust"],
+    "sadness": ["disappointment", "grief", "remorse", "sadness"],
+    "warmth": ["caring", "gratitude", "love"],
+    "joy": [
+        "admiration", "amusement", "approval", "excitement",
+        "joy", "optimism", "pride",
+    ],
+    "neutral": ["neutral"],
+}
+```
+
+Aggregation uses `logsumexp` over available label logits for each group, then
+the pipeline softmaxes the final six group logits. If a model exposes only a
+partial label set, missing labels are ignored; a completely missing group gets
+a very low fallback logit.

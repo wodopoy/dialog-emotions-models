@@ -2,12 +2,21 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from dialog_emo_models.models import DummyEmotionModel, EmotionModel
+from dialog_emo_models.models import (
+    DummyEmotionModel,
+    EmotionModel,
+    FyaronskiyDebertaGoEmotionsModel,
+    MaxKazakRuBertBaseGoEmotionsModel,
+    SearaRuBertTiny2GoEmotionsModel,
+)
 
 ModelFactory = Callable[[], EmotionModel]
 
 MODEL_REGISTRY: dict[str, ModelFactory] = {
     "dummy": DummyEmotionModel,
+    "hf-fyaronskiy-deberta-goemotions": FyaronskiyDebertaGoEmotionsModel,
+    "hf-maxkazak-rubert-base-goemotions": MaxKazakRuBertBaseGoEmotionsModel,
+    "hf-seara-rubert-tiny2-goemotions": SearaRuBertTiny2GoEmotionsModel,
 }
 
 
