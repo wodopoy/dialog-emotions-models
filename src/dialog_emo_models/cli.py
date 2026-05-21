@@ -93,7 +93,7 @@ def _parse_command(args: argparse.Namespace) -> None:
 def _score_command(args: argparse.Namespace) -> None:
     parsed = load_parsed_csv(args.input)
     model = _load_model(args.model, args.model_path)
-    scored = score_parsed_frame(parsed, model)
+    scored = score_parsed_frame(parsed, model, show_progress=True)
     output = write_full_csv(scored, args.output)
     print(f"scored {len(scored)} rows with {_model_label(args)} -> {output}")
 
@@ -105,7 +105,7 @@ def _run_command(args: argparse.Namespace) -> None:
         print(f"parsed {len(parsed)} rows -> {parsed_output}")
 
     model = _load_model(args.model, args.model_path)
-    scored = score_parsed_frame(parsed, model)
+    scored = score_parsed_frame(parsed, model, show_progress=True)
     output = write_full_csv(scored, args.output)
     print(f"scored {len(scored)} rows with {_model_label(args)} -> {output}")
 

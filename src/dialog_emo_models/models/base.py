@@ -34,7 +34,13 @@ class EmotionModel(ABC):
     def predict_logits(self, texts: Sequence[str]) -> NDArray[np.float64]:
         """Return an array shaped `(len(texts), len(EMOTIONS))`."""
 
-    def predict_proba(self, texts: Sequence[str]) -> NDArray[np.float64]:
+    def predict_proba(
+        self,
+        texts: Sequence[str],
+        *,
+        show_progress: bool = False,
+    ) -> NDArray[np.float64]:
+        _ = show_progress
         logits = validate_logits(self.predict_logits(texts), expected_rows=len(texts))
         return logits_to_probabilities(logits)
 

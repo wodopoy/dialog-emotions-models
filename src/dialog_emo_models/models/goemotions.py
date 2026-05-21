@@ -5,6 +5,7 @@ from typing import Sequence
 
 import numpy as np
 from numpy.typing import NDArray
+from tqdm.auto import tqdm
 
 from dialog_emo_models.models.base import EmotionModel
 from dialog_emo_models.schema import EMOTIONS
@@ -96,38 +97,75 @@ class GoEmotionsHFModel(EmotionModel):
         *,
         labels: Sequence[str] | None = GOEMOTIONS_LABELS,
         max_length: int = 128,
+        batch_size: int = 64,
         device: str | None = None,
         missing_group_logit: float = -30.0,
     ) -> None:
         self.model_id = model_id
         self.fallback_labels = tuple(labels) if labels is not None else None
         self.max_length = max_length
+        self.batch_size = batch_size
         self.device = device
         self.missing_group_logit = missing_group_logit
         self._tokenizer = None
         self._model = None
 
     def predict_logits(self, texts: Sequence[str]) -> NDArray[np.float64]:
+        return self._predict_logits(texts, show_progress=False)
+
+    def predict_proba(
+        self,
+        texts: Sequence[str],
+        *,
+        show_progress: bool = False,
+    ) -> NDArray[np.float64]:
+        from dialog_emo_models.models.base import logits_to_probabilities, validate_logits
+
+        logits = validate_logits(
+            self._predict_logits(texts, show_progress=show_progress),
+            expected_rows=len(texts),
+        )
+        return logits_to_probabilities(logits)
+
+    def _predict_logits(
+        self,
+        texts: Sequence[str],
+        *,
+        show_progress: bool,
+    ) -> NDArray[np.float64]:
         if not texts:
             return np.zeros((0, len(EMOTIONS)), dtype=float)
 
         tokenizer, model = self._load_backend()
-        inputs = tokenizer(
-            list(texts),
-            truncation=True,
-            padding=True,
-            max_length=self.max_length,
-            return_tensors="pt",
-        )
 
         import torch
 
         model_device = next(model.parameters()).device
-        inputs = {key: value.to(model_device) for key, value in inputs.items()}
+        label_logits_chunks = []
+        text_list = list(texts)
+        starts = range(0, len(text_list), self.batch_size)
+        iterator = tqdm(
+            starts,
+            total=(len(text_list) + self.batch_size - 1) // self.batch_size,
+            desc=f"scoring {self.model_id}",
+            unit="batch",
+            disable=not show_progress,
+        )
         with torch.no_grad():
-            output = model(**inputs)
+            for start in iterator:
+                batch = text_list[start : start + self.batch_size]
+                inputs = tokenizer(
+                    batch,
+                    truncation=True,
+                    padding=True,
+                    max_length=self.max_length,
+                    return_tensors="pt",
+                )
+                inputs = {key: value.to(model_device) for key, value in inputs.items()}
+                output = model(**inputs)
+                label_logits_chunks.append(output.logits.detach().cpu().numpy())
 
-        label_logits = output.logits.detach().cpu().numpy()
+        label_logits = np.concatenate(label_logits_chunks, axis=0)
         labels = self._labels_for_model(model, label_logits.shape[1])
         return aggregate_goemotions_logits(
             label_logits,
@@ -150,7 +188,13 @@ class GoEmotionsHFModel(EmotionModel):
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         model = AutoModelForSequenceClassification.from_pretrained(self.model_id)
-        target_device = self.device or ("cuda" if torch.cuda.is_available() else "cpu")
+        target_device = self.device or (
+            "mps"
+            if torch.backends.mps.is_available()
+            else "cuda"
+            if torch.cuda.is_available()
+            else "cpu"
+        )
         model.to(target_device)
         model.eval()
 

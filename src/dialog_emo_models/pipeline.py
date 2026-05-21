@@ -19,10 +19,15 @@ def parse_telegram_json(path: str | Path) -> pd.DataFrame:
     return load_telegram_export(path)
 
 
-def score_parsed_frame(frame: pd.DataFrame, model: EmotionModel) -> pd.DataFrame:
+def score_parsed_frame(
+    frame: pd.DataFrame,
+    model: EmotionModel,
+    *,
+    show_progress: bool = False,
+) -> pd.DataFrame:
     parsed = validate_parsed_frame(frame)
     texts = parsed["text"].tolist()
-    probabilities = model.predict_proba(texts)
+    probabilities = model.predict_proba(texts, show_progress=show_progress)
     validate_logits(probabilities, expected_rows=len(parsed))
 
     scored = parsed.copy()

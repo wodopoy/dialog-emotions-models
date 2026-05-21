@@ -8,6 +8,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.metrics import f1_score
+from tqdm.auto import tqdm
 
 from dialog_emo_models.models import (
     GOEMOTIONS_GROUPS,
@@ -61,7 +62,7 @@ def main() -> None:
 
     splits: dict[str, pd.DataFrame] = {}
     stats: dict[str, dict[str, int]] = {}
-    for split in ("train", "validation", "test"):
+    for split in tqdm(("train", "validation", "test"), desc="convert splits", unit="split"):
         splits[split], stats[split] = _convert_split(args.data_dir / f"{split}.parquet")
         splits[split].to_csv(args.output_dir / f"{split}.full.csv", index=False)
 
@@ -82,7 +83,7 @@ def main() -> None:
 
 
 def _download_missing_splits(data_dir: Path) -> None:
-    for split, url in SPLIT_URLS.items():
+    for split, url in tqdm(SPLIT_URLS.items(), desc="download splits", unit="split"):
         path = data_dir / f"{split}.parquet"
         if not path.exists():
             urlretrieve(url, path)
@@ -98,7 +99,12 @@ def _convert_split(path: Path) -> tuple[pd.DataFrame, dict[str, int]]:
     rows: list[dict[str, object]] = []
     dropped_unmapped = 0
     multi_group = 0
-    for _, row in raw.iterrows():
+    for _, row in tqdm(
+        raw.iterrows(),
+        total=len(raw),
+        desc=f"map {path.stem}",
+        unit="row",
+    ):
         groups = sorted(
             {
                 label_to_group[label_id_to_name[int(label_id)]]
@@ -135,16 +141,28 @@ def _convert_split(path: Path) -> tuple[pd.DataFrame, dict[str, int]]:
 def _evaluate(splits: dict[str, pd.DataFrame], output_dir: Path) -> pd.DataFrame:
     runs: list[dict[str, object]] = []
     train = splits["train"]
-    for model_name, factory in MODEL_FACTORIES.items():
+    for model_name, factory in tqdm(
+        MODEL_FACTORIES.items(),
+        desc="train/evaluate models",
+        unit="model",
+    ):
         print(f"TRAIN {model_name}", flush=True)
         model = factory()
         if model_name != "dummy":
-            model = train_from_full_frame(train, model)
+            model = train_from_full_frame(train, model, show_progress=True)
             joblib.dump(model, output_dir / f"{model_name}.joblib")
 
-        for split_name in ("validation", "test"):
+        for split_name in tqdm(
+            ("validation", "test"),
+            desc=f"evaluate {model_name}",
+            unit="split",
+            leave=False,
+        ):
             frame = splits[split_name]
-            proba = model.predict_proba(frame["text"].astype(str).tolist())
+            proba = model.predict_proba(
+                frame["text"].astype(str).tolist(),
+                show_progress=True,
+            )
             row: dict[str, object] = {
                 "model": model_name,
                 "split": split_name,

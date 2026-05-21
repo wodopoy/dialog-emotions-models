@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
+from tqdm.auto import tqdm
 
 from dialog_emo_models.models import (
     EmotionModel,
@@ -41,10 +42,20 @@ def labels_from_full_frame(frame: pd.DataFrame) -> NDArray[np.float64]:
     return validated.loc[:, EMOTIONS].to_numpy(dtype=float)
 
 
-def train_from_full_frame(frame: pd.DataFrame, model: EmotionModel) -> EmotionModel:
+def train_from_full_frame(
+    frame: pd.DataFrame,
+    model: EmotionModel,
+    *,
+    show_progress: bool = False,
+) -> EmotionModel:
     validated = validate_full_frame(frame)
     texts = validated["text"].tolist()
     labels = labels_from_full_frame(validated)
+    if show_progress:
+        with tqdm(total=1, desc=f"training {type(model).__name__}", unit="model") as bar:
+            fitted = model.fit(texts, labels)
+            bar.update(1)
+            return fitted
     return model.fit(texts, labels)
 
 
@@ -55,6 +66,10 @@ def train_from_full_csv(
     output_path: str | Path,
 ) -> EmotionModel:
     frame = load_full_csv(input_path)
-    model = train_from_full_frame(frame, create_trainable_model(model_name))
+    model = train_from_full_frame(
+        frame,
+        create_trainable_model(model_name),
+        show_progress=True,
+    )
     model.save(output_path)
     return model
