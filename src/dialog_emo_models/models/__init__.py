@@ -10,7 +10,11 @@ from dialog_emo_models.models.baselines import (
 )
 from dialog_emo_models.models.dummy import DummyEmotionModel
 from dialog_emo_models.models.fasttext import FastTextSupervisedEmotionModel
-from dialog_emo_models.models.lexicon import LEXICON, LexiconEmotionModel
+from dialog_emo_models.models.lexicon import (
+    LEXICON,
+    LearnedLexiconEmotionModel,
+    LexiconEmotionModel,
+)
 from dialog_emo_models.models.goemotions import (
     FYARONSKIY_DEBERTA_GOEMOTIONS,
     GOEMOTIONS_GROUPS,
@@ -43,6 +47,7 @@ __all__ = [
     "GoEmotionsHFModel",
     "LEXICON",
     "LabelPriorEmotionModel",
+    "LearnedLexiconEmotionModel",
     "LexiconEmotionModel",
     "MAXKAZAK_RUBERT_BASE_GOEMOTIONS",
     "MajorityClassEmotionModel",

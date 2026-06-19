@@ -55,3 +55,24 @@ def test_fasttext_trains_saves_loads_and_scores(tmp_path) -> None:
     model.save(path)
     reloaded = FastTextSupervisedEmotionModel.load(path)
     assert reloaded.predict_proba(["ура супер"]).shape == (1, len(EMOTIONS))
+
+
+@pytest.mark.skipif(not _HAS_FASTTEXT, reason="requires optional fasttext dependency")
+def test_fasttext_temperature_softens_distribution() -> None:
+    rows = [
+        ("ура классно радость супер отлично", "joy"),
+        ("люблю спасибо тепло обнимаю забота", "warmth"),
+        ("грустно больно печаль тоска одиноко", "sadness"),
+        ("злюсь бесит ярость ненавижу раздражает", "anger"),
+        ("страшно тревожно боюсь паника волнуюсь", "anxiety"),
+        ("встреча созвон файл задача календарь", "neutral"),
+    ]
+    texts = [text for text, _ in rows] * 8
+    labels = np.array([_one_hot(label) for _, label in rows] * 8)
+
+    model = FastTextSupervisedEmotionModel().fit(texts, labels)
+    sharp = float(model.predict_proba(["ура классно радость супер"]).max())
+    model.temperature = 4.0
+    soft = float(model.predict_proba(["ура классно радость супер"]).max())
+
+    assert soft < sharp  # higher temperature flattens the peaky distribution

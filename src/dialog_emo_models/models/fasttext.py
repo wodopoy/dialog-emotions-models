@@ -34,6 +34,13 @@ def _import_fasttext():
     return fasttext
 
 
+def _write_fasttext_file(path: Path, texts: Sequence[str], target: NDArray[np.int64]) -> None:
+    with path.open("w", encoding="utf-8", newline="\n") as handle:
+        for text, label_index in zip(texts, target):
+            line = normalize_text(text).replace("\n", " ").strip()
+            handle.write(f"__label__{EMOTIONS[int(label_index)]} {line}\n")
+
+
 class FastTextSupervisedEmotionModel(EmotionModel):
     """Native fastText supervised classifier carried over from the thesis.
 
@@ -48,10 +55,14 @@ class FastTextSupervisedEmotionModel(EmotionModel):
         *,
         thread: int = 4,
         verbose: int = 0,
+        temperature: float = 1.0,
         params: dict[str, object] | None = None,
     ) -> None:
         self.thread = thread
         self.verbose = verbose
+        # >1 softens fastText's peaky distributions (post-hoc calibration); tuned
+        # against validation KL. Does not change argmax, only the distribution.
+        self.temperature = temperature
         self.params = dict(params) if params is not None else dict(DEFAULT_PARAMS)
         self._model = None
 
@@ -67,22 +78,57 @@ class FastTextSupervisedEmotionModel(EmotionModel):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             train_path = Path(tmp_dir) / "train.txt"
-            with train_path.open("w", encoding="utf-8", newline="\n") as handle:
-                for text, label_index in zip(texts, target):
-                    line = normalize_text(text).replace("\n", " ").strip()
-                    handle.write(f"__label__{EMOTIONS[int(label_index)]} {line}\n")
+            _write_fasttext_file(train_path, texts, target)
             model = fasttext.train_supervised(
                 input=str(train_path),
                 thread=self.thread,
                 verbose=self.verbose,
                 **self.params,
             )
-            try:
-                model.quantize(input=str(train_path), retrain=True, cutoff=100_000)
-            except Exception:  # pragma: no cover - quantization is best effort
-                pass
+            self._quantize(model, train_path)
         self._model = model
         return self
+
+    def fit_autotune(
+        self,
+        texts: Sequence[str],
+        labels: NDArray[np.float64],
+        val_texts: Sequence[str],
+        val_labels: NDArray[np.float64],
+        *,
+        duration: int = 300,
+        model_size: str | None = None,
+    ) -> FastTextSupervisedEmotionModel:
+        """Let fastText auto-tune its own hyperparameters on a validation file."""
+        fasttext = _import_fasttext()
+        target = validate_logits(labels, expected_rows=len(texts)).argmax(axis=1)
+        val_target = validate_logits(val_labels, expected_rows=len(val_texts)).argmax(axis=1)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            train_path = Path(tmp_dir) / "train.txt"
+            val_path = Path(tmp_dir) / "val.txt"
+            _write_fasttext_file(train_path, texts, target)
+            _write_fasttext_file(val_path, val_texts, val_target)
+            kwargs: dict[str, object] = {
+                "input": str(train_path),
+                "autotuneValidationFile": str(val_path),
+                "autotuneDuration": duration,
+                "thread": self.thread,
+                "verbose": self.verbose,
+            }
+            if model_size is not None:
+                kwargs["autotuneModelSize"] = model_size
+            model = fasttext.train_supervised(**kwargs)
+            self.params = {"autotune": True, "duration": duration}
+            if model_size is None:
+                self._quantize(model, train_path)
+        self._model = model
+        return self
+
+    def _quantize(self, model, train_path: Path) -> None:
+        try:
+            model.quantize(input=str(train_path), retrain=True, cutoff=100_000)
+        except Exception:  # pragma: no cover - quantization is best effort
+            pass
 
     def predict_logits(self, texts: Sequence[str]) -> NDArray[np.float64]:
         if self._model is None:
@@ -99,7 +145,7 @@ class FastTextSupervisedEmotionModel(EmotionModel):
                 column = index_by_emotion.get(emotion)
                 if column is not None:
                     logits[row, column] = float(np.log(max(probability, _LOGIT_FLOOR)))
-        return logits
+        return logits / self.temperature
 
     def save(self, path: str | Path) -> None:
         output = Path(path)
