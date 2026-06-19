@@ -5,6 +5,7 @@ from dialog_emo_models.models.base import (
     validate_logits,
 )
 from dialog_emo_models.models.dummy import DummyEmotionModel
+from dialog_emo_models.models.lexicon import LEXICON, LexiconEmotionModel
 from dialog_emo_models.models.goemotions import (
     FYARONSKIY_DEBERTA_GOEMOTIONS,
     GOEMOTIONS_GROUPS,
@@ -33,6 +34,8 @@ __all__ = [
     "GOEMOTIONS_LABELS",
     "GOEMOTIONS_PRESETS",
     "GoEmotionsHFModel",
+    "LEXICON",
+    "LexiconEmotionModel",
     "MAXKAZAK_RUBERT_BASE_GOEMOTIONS",
     "MaxKazakRuBertBaseGoEmotionsModel",
     "ModelOutputError",

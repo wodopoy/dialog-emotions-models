@@ -6,6 +6,7 @@ from dialog_emo_models.models import (
     DummyEmotionModel,
     EmotionModel,
     FyaronskiyDebertaGoEmotionsModel,
+    LexiconEmotionModel,
     MaxKazakRuBertBaseGoEmotionsModel,
     SearaRuBertTiny2GoEmotionsModel,
 )
@@ -14,6 +15,7 @@ ModelFactory = Callable[[], EmotionModel]
 
 MODEL_REGISTRY: dict[str, ModelFactory] = {
     "dummy": DummyEmotionModel,
+    "lexicon": LexiconEmotionModel,
     "hf-fyaronskiy-deberta-goemotions": FyaronskiyDebertaGoEmotionsModel,
     "hf-maxkazak-rubert-base-goemotions": MaxKazakRuBertBaseGoEmotionsModel,
     "hf-seara-rubert-tiny2-goemotions": SearaRuBertTiny2GoEmotionsModel,
