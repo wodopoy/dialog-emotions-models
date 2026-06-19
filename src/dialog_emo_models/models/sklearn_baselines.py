@@ -8,9 +8,46 @@ import numpy as np
 from numpy.typing import NDArray
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression, Ridge
+from sklearn.pipeline import FeatureUnion
 
 from dialog_emo_models.models.base import EmotionModel, ModelT, validate_logits
 from dialog_emo_models.schema import EMOTIONS
+
+# Combined analyzer carried over from the thesis tfidf_lr model: it fuses word
+# unigram/bigram features with character n-grams in a single FeatureUnion.
+WORD_CHAR_ANALYZER = "word+char"
+
+
+def _build_vectorizer(
+    analyzer: str,
+    ngram_range: tuple[int, int],
+    min_df: int,
+    max_features: int | None,
+):
+    if analyzer == WORD_CHAR_ANALYZER:
+        return FeatureUnion(
+            [
+                (
+                    "word",
+                    TfidfVectorizer(
+                        analyzer="word", ngram_range=(1, 2), min_df=1, lowercase=True
+                    ),
+                ),
+                (
+                    "char",
+                    TfidfVectorizer(
+                        analyzer="char_wb", ngram_range=(3, 5), min_df=1, lowercase=True
+                    ),
+                ),
+            ]
+        )
+    return TfidfVectorizer(
+        analyzer=analyzer,
+        ngram_range=ngram_range,
+        min_df=min_df,
+        max_features=max_features,
+        lowercase=True,
+    )
 
 
 class TfidfRidgeEmotionModel(EmotionModel):
@@ -25,13 +62,7 @@ class TfidfRidgeEmotionModel(EmotionModel):
         max_features: int | None = 50_000,
         alpha: float = 1.0,
     ) -> None:
-        self.vectorizer = TfidfVectorizer(
-            analyzer=analyzer,
-            ngram_range=ngram_range,
-            min_df=min_df,
-            max_features=max_features,
-            lowercase=True,
-        )
+        self.vectorizer = _build_vectorizer(analyzer, ngram_range, min_df, max_features)
         self.estimator = Ridge(alpha=alpha)
         self._is_fitted = False
 
@@ -78,13 +109,7 @@ class TfidfLogRegEmotionModel(EmotionModel):
         max_iter: int = 1_000,
         class_weight: str | None = "balanced",
     ) -> None:
-        self.vectorizer = TfidfVectorizer(
-            analyzer=analyzer,
-            ngram_range=ngram_range,
-            min_df=min_df,
-            max_features=max_features,
-            lowercase=True,
-        )
+        self.vectorizer = _build_vectorizer(analyzer, ngram_range, min_df, max_features)
         self.estimator = LogisticRegression(
             max_iter=max_iter,
             class_weight=class_weight,

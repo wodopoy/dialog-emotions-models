@@ -20,6 +20,8 @@ TrainableModelFactory = Callable[[], EmotionModel]
 TRAINABLE_MODEL_REGISTRY: dict[str, TrainableModelFactory] = {
     "logreg-tfidf": TfidfLogRegEmotionModel,
     "ridge-tfidf": TfidfRidgeEmotionModel,
+    "logreg-word-char-tfidf": lambda: TfidfLogRegEmotionModel(analyzer="word+char"),
+    "ridge-word-char-tfidf": lambda: TfidfRidgeEmotionModel(analyzer="word+char"),
 }
 
 

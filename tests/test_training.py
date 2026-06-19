@@ -46,8 +46,26 @@ def _training_frame() -> pd.DataFrame:
 def test_trainable_registry_contains_linear_baselines() -> None:
     names = available_trainable_model_names()
 
-    assert names == ["logreg-tfidf", "ridge-tfidf"]
+    assert names == [
+        "logreg-tfidf",
+        "logreg-word-char-tfidf",
+        "ridge-tfidf",
+        "ridge-word-char-tfidf",
+    ]
     assert isinstance(create_trainable_model("ridge-tfidf"), TfidfRidgeEmotionModel)
+
+
+def test_word_char_tfidf_trains_saves_loads_and_scores(tmp_path) -> None:
+    frame = _training_frame()
+    model = train_from_full_frame(frame, create_trainable_model("logreg-word-char-tfidf"))
+    model_path = tmp_path / "word-char.joblib"
+    model.save(model_path)
+
+    loaded = TfidfLogRegEmotionModel.load(model_path)
+    parsed = frame.loc[:, ["turn_index", "timestamp", "sender", "text"]]
+    scored = score_parsed_frame(parsed, loaded)
+
+    assert scored["anger"].iloc[3] > scored["joy"].iloc[3]
 
 
 def test_labels_from_full_frame_returns_emotion_matrix() -> None:
