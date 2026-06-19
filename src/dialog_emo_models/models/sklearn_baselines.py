@@ -12,6 +12,7 @@ from sklearn.pipeline import FeatureUnion
 
 from dialog_emo_models.models.base import EmotionModel, ModelT, validate_logits
 from dialog_emo_models.schema import EMOTIONS
+from dialog_emo_models.text import normalize_text
 
 # Combined analyzer carried over from the thesis tfidf_lr model: it fuses word
 # unigram/bigram features with character n-grams in a single FeatureUnion.
@@ -167,7 +168,9 @@ class TfidfLogRegEmotionModel(EmotionModel):
 
 
 def _clean_texts(texts: Sequence[str]) -> list[str]:
-    return ["" if text is None else str(text) for text in texts]
+    # Shared normalization (emoji -> cue word, URL/mention folding, lowercase) so
+    # the linear models see the same surface form as lexicon/fastText/transformer.
+    return [normalize_text(text) for text in texts]
 
 
 def _probabilities_to_logits(labels: NDArray[np.float64]) -> NDArray[np.float64]:
