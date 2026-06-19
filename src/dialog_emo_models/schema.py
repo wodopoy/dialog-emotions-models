@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pandas as pd
 
-EMOTIONS = ("joy", "warmth", "sadness", "anger", "anxiety", "neutral")
+# Emotion set is switchable via EMO_SCHEME for experiments: default 6 classes, or
+# 7 (adds `surprise`) so CEDR maps in fully. Set the env var before importing.
+if os.environ.get("EMO_SCHEME") == "7":
+    EMOTIONS = ("joy", "warmth", "sadness", "anger", "anxiety", "surprise", "neutral")
+else:
+    EMOTIONS = ("joy", "warmth", "sadness", "anger", "anxiety", "neutral")
 PARSED_COLUMNS = ("turn_index", "timestamp", "sender", "text")
 FULL_COLUMNS = (*PARSED_COLUMNS, *EMOTIONS)
 PROBABILITY_SUM_TOLERANCE = 1e-3

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Sequence
 
@@ -10,22 +11,38 @@ from tqdm.auto import tqdm
 from dialog_emo_models.models.base import EmotionModel
 from dialog_emo_models.schema import EMOTIONS
 
-GOEMOTIONS_GROUPS: dict[str, list[str]] = {
-    "anxiety": ["fear", "nervousness", "embarrassment"],
-    "anger": ["anger", "annoyance", "disapproval", "disgust"],
-    "sadness": ["disappointment", "grief", "remorse", "sadness"],
-    "warmth": ["caring", "gratitude", "love"],
-    "joy": [
-        "admiration",
-        "amusement",
-        "approval",
-        "excitement",
-        "joy",
-        "optimism",
-        "pride",
-    ],
-    "neutral": ["neutral"],
-}
+if os.environ.get("EMO_SCHEME") == "7":
+    # 7-class scheme: adds `surprise` (recovers realization/curiosity/confusion
+    # from the dropped set) and folds `relief` into joy. Makes CEDR map in fully.
+    GOEMOTIONS_GROUPS: dict[str, list[str]] = {
+        "joy": [
+            "admiration", "amusement", "approval", "excitement",
+            "joy", "optimism", "pride", "relief",
+        ],
+        "warmth": ["caring", "gratitude", "love"],
+        "sadness": ["disappointment", "grief", "remorse", "sadness"],
+        "anger": ["anger", "annoyance", "disapproval", "disgust"],
+        "anxiety": ["fear", "nervousness", "embarrassment"],
+        "surprise": ["surprise", "realization", "curiosity", "confusion"],
+        "neutral": ["neutral"],
+    }
+else:
+    GOEMOTIONS_GROUPS: dict[str, list[str]] = {
+        "anxiety": ["fear", "nervousness", "embarrassment"],
+        "anger": ["anger", "annoyance", "disapproval", "disgust"],
+        "sadness": ["disappointment", "grief", "remorse", "sadness"],
+        "warmth": ["caring", "gratitude", "love"],
+        "joy": [
+            "admiration",
+            "amusement",
+            "approval",
+            "excitement",
+            "joy",
+            "optimism",
+            "pride",
+        ],
+        "neutral": ["neutral"],
+    }
 
 GOEMOTIONS_LABELS = (
     "admiration",

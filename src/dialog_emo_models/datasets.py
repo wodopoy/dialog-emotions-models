@@ -7,6 +7,7 @@ of the 6 emotions (no warmth, surprise dropped), so warmth is never scored on it
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import numpy as np
@@ -16,9 +17,12 @@ from numpy.typing import NDArray
 from dialog_emo_models.models import GOEMOTIONS_GROUPS, GOEMOTIONS_LABELS
 from dialog_emo_models.schema import EMOTIONS
 
-# CEDR (sagteam/cedr_v1) label ids -> our emotions; 'surprise' has no target.
+# CEDR (sagteam/cedr_v1) label ids -> our emotions. In the 6-class scheme
+# 'surprise' has no target (dropped); in the 7-class scheme it maps in fully.
 CEDR_LABELS = ("joy", "sadness", "surprise", "fear", "anger")
 CEDR_TO_EMOTION = {"joy": "joy", "sadness": "sadness", "fear": "anxiety", "anger": "anger"}
+if os.environ.get("EMO_SCHEME") == "7":
+    CEDR_TO_EMOTION["surprise"] = "surprise"
 
 
 def _soft_row(groups: list[str]) -> list[float]:
