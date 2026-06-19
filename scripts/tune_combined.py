@@ -130,6 +130,7 @@ def main() -> None:
     parser.add_argument("--cedr-dir", type=Path, default=Path("artifacts/datasets/cedr"))
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts/experiments/tune-combined"))
     parser.add_argument("--quick", action="store_true")
+    parser.add_argument("--k-scale", type=float, default=1.0, help="Multiply per-family config count.")
     parser.add_argument("--max-train-rows", type=int, default=None)
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -155,7 +156,6 @@ def main() -> None:
         cedr_fit = (cedr_fit[0][:n], cedr_fit[1][:n])
 
     train_sets = {
-        "rugo": rugo_tr,
         "rugo+cedr": (rugo_tr[0] + cedr_fit[0], np.vstack([rugo_tr[1], cedr_fit[1]])),
     }
     print({k: len(v[0]) for k, v in train_sets.items()},
@@ -165,7 +165,7 @@ def main() -> None:
     all_rows: list[dict] = []
     best: dict[tuple, dict] = {}
     for family, (builder, k, space) in FAMILIES.items():
-        configs = sample_configs(space, 3 if args.quick else k, rng)
+        configs = sample_configs(space, 3 if args.quick else int(round(k * args.k_scale)), rng)
         for ts_name, (tx, ty) in train_sets.items():
             for p in tqdm(configs, desc=f"{family}/{ts_name}", unit="cfg"):
                 try:
