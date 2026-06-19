@@ -33,6 +33,10 @@ from dialog_emo_models.models.sklearn_baselines import (
     TfidfLogRegEmotionModel,
     TfidfRidgeEmotionModel,
 )
+from dialog_emo_models.models.sklearn_extra import (
+    TfidfNaiveBayesEmotionModel,
+    TfidfTreeEmotionModel,
+)
 from dialog_emo_models.models.transformer import RuBertTiny2EmotionModel
 
 __all__ = [
@@ -57,7 +61,9 @@ __all__ = [
     "SEARA_RUBERT_TINY2_GOEMOTIONS",
     "SearaRuBertTiny2GoEmotionsModel",
     "TfidfLogRegEmotionModel",
+    "TfidfNaiveBayesEmotionModel",
     "TfidfRidgeEmotionModel",
+    "TfidfTreeEmotionModel",
     "aggregate_goemotions_logits",
     "logits_to_probabilities",
     "missing_goemotions_labels",
