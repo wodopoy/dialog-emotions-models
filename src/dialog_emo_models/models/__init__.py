@@ -4,6 +4,10 @@ from dialog_emo_models.models.base import (
     logits_to_probabilities,
     validate_logits,
 )
+from dialog_emo_models.models.baselines import (
+    LabelPriorEmotionModel,
+    MajorityClassEmotionModel,
+)
 from dialog_emo_models.models.dummy import DummyEmotionModel
 from dialog_emo_models.models.fasttext import FastTextSupervisedEmotionModel
 from dialog_emo_models.models.lexicon import LEXICON, LexiconEmotionModel
@@ -38,8 +42,10 @@ __all__ = [
     "GOEMOTIONS_PRESETS",
     "GoEmotionsHFModel",
     "LEXICON",
+    "LabelPriorEmotionModel",
     "LexiconEmotionModel",
     "MAXKAZAK_RUBERT_BASE_GOEMOTIONS",
+    "MajorityClassEmotionModel",
     "MaxKazakRuBertBaseGoEmotionsModel",
     "ModelOutputError",
     "RuBertTiny2EmotionModel",
