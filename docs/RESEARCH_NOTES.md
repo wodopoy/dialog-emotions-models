@@ -271,3 +271,31 @@ Validation (n=4905), сортировка по KL:
 - Оговорка: дроп смешивает истинный domain shift и несовпадение схемы меток (нет warmth, выкинут surprise). Это честное in-domain→native-russian приближение «реальности».
 
 **Вывод по вопросу «база достаточна / добавлять модели/данные»:** база теперь с запасом достаточна. Деревья — dominated+раздуты (не нужны), NB добавлен как классика, больше данных — плато, а ценная глубина (per-class/ошибки/кросс-домен) сделана. Можно садиться за текст.
+
+## Каталог моделей (описания)
+
+Полы / тривиальные базлайны:
+- **dummy** — равномерное 1/6 на все классы. Нижняя граница «ничего не выучили».
+- **majority** — всегда самый частый класс (neutral). Пол по accuracy.
+- **prior** — распределение классов трейна на каждый вход. Честный вероятностный пол (KL/MAE).
+
+Лексиконы (интерпретируемые, крошечные):
+- **lexicon-hand** — рукописный словарь стем-слов на эмоцию, счёт совпадений → softmax. Без обучения.
+- **lexicon-learned** — data-driven словарь: топ-K слов на эмоцию по log-odds из трейна, скоринг суммой весов. Обучаемый, top_k=200.
+
+Линейные на TF-IDF (основные деплой-кандидаты):
+- **ridge-tfidf / ridge-word-tfidf / ridge-word-char-tfidf** — TF-IDF (char_wb 3-5 / word 1-2 / их union) + Ridge-регрессия по мягким меткам (учит лог-вероятности). Лучший MAE, но переуверен (плохой ECE).
+- **logreg-tfidf / logreg-word-tfidf / logreg-word-char-tfidf** — те же фичи + LogisticRegression по argmax-метке. Лучший KL и калибровка; деплой-лидеры (char и union).
+
+Subword:
+- **fasttext-supervised** — нативный fastText (char n-grams + word n-grams), обучение на argmax. Самый быстрый инференс. `temperature` — пост-калибровка (сглаживает переуверенность); `loss=ova` лучше softmax.
+
+Классические доп-базлайны:
+- **nb-complement / nb-multinomial** — TF-IDF + Naive Bayes. Крошечные, быстрые; complement лучше по acc, multinomial лучше калиброван.
+- **tree-rf / tree-hgb** — TF-IDF → TruncatedSVD(300) → RandomForest / HistGradientBoosting. Включены для полноты; на разреженном тексте dominated и сильно раздуты (119-616 МБ) — не деплой-кандидаты.
+
+Тяжёлые (трансформеры, потолки качества — не для телефона):
+- **rubert-tiny2-finetune** — дообученный `cointegrated/rubert-tiny2` (~29M параметров, ~117 МБ) на argmax-метках. Лучший KL в общем зачёте.
+- **hf-seara-rubert-tiny2** — готовый `seara/rubert-tiny2-...-ru-go-emotions` (28-лейбловый GoEmotions, агрегируется в 6).
+- **hf-fyaronskiy-deberta** — готовый `fyaronskiy/deberta-v1-base-russian-go-emotions` (~475 МБ). Лучшая accuracy.
+- **hf-maxkazak-rubert-base** — `MaxKazak/ruBert-base-...` (~680 МБ); несовместим со схемой меток (Izard, 9 классов) → KL мусорный, из честного сравнения исключаем.
