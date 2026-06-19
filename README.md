@@ -147,21 +147,15 @@ trained on one full CSV and compared on one validation set:
 | `logreg-tfidf` | char n-gram TF-IDF + `LogisticRegression` | trains on the strongest emotion per row | — |
 | `ridge-word-char-tfidf` | word + char TF-IDF union + `Ridge` | soft labels | — |
 | `logreg-word-char-tfidf` | word + char TF-IDF union + `LogisticRegression` | strongest emotion per row | — |
-| `fasttext-supervised` | native fastText with subword features | strongest emotion per row | `fasttext` |
+| `fasttext-supervised` | native fastText with subword features | strongest emotion per row | — |
 | `rubert-tiny2-finetune` | RuBERT-tiny2 fine-tuned classifier | strongest emotion per row | — |
 
 `ridge-tfidf` is the recommended first training baseline. It preserves the idea
 that labels are distributions, trains fast on small data, saves as `.joblib`,
 and still satisfies the same `EmotionModel` contract at inference time. The
 `word-char` variants fuse word unigram/bigram and character n-gram features in a
-single `FeatureUnion`.
-
-`fasttext-supervised` carries an optional dependency; install it only when
-needed:
-
-```bash
-uv sync --extra fasttext   # native fastText
-```
+single `FeatureUnion`. `fasttext-supervised` uses the native fastText library
+(`fasttext-wheel`, a base dependency).
 
 ## Lexicon Baseline
 

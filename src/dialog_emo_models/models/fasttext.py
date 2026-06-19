@@ -27,10 +27,9 @@ _LOGIT_FLOOR = 1e-9
 def _import_fasttext():
     try:
         import fasttext
-    except ImportError as exc:  # pragma: no cover - exercised only without the dep
+    except ImportError as exc:  # pragma: no cover - fasttext-wheel is a base dependency
         raise RuntimeError(
-            "The fastText model requires the optional 'fasttext' dependency. "
-            "Install it with: uv add fasttext-wheel  (or `uv sync --extra fasttext`)."
+            "fastText is unavailable. Reinstall the environment with: uv sync."
         ) from exc
     return fasttext
 
@@ -92,8 +91,10 @@ class FastTextSupervisedEmotionModel(EmotionModel):
         index_by_emotion = {emotion: column for column, emotion in enumerate(EMOTIONS)}
         for row, text in enumerate(texts):
             clean = normalize_text(text).replace("\n", " ").strip()
-            raw_labels, raw_probs = self._model.predict(clean, k=len(EMOTIONS))
-            for raw_label, probability in zip(raw_labels, raw_probs):
+            # Call the C++ predictor directly: fasttext-wheel's Python wrapper does
+            # np.array(probs, copy=False), which raises on NumPy >= 2. f.predict
+            # returns (prob, label) pairs and skips that conversion.
+            for probability, raw_label in self._model.f.predict(clean, len(EMOTIONS), 0.0, "strict"):
                 emotion = str(raw_label).replace("__label__", "", 1)
                 column = index_by_emotion.get(emotion)
                 if column is not None:
