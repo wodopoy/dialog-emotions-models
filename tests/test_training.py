@@ -47,6 +47,7 @@ def test_trainable_registry_contains_linear_baselines() -> None:
     names = available_trainable_model_names()
 
     assert names == [
+        "fasttext-supervised",
         "logreg-tfidf",
         "logreg-word-char-tfidf",
         "ridge-tfidf",

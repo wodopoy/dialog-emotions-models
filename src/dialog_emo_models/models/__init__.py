@@ -5,6 +5,7 @@ from dialog_emo_models.models.base import (
     validate_logits,
 )
 from dialog_emo_models.models.dummy import DummyEmotionModel
+from dialog_emo_models.models.fasttext import FastTextSupervisedEmotionModel
 from dialog_emo_models.models.lexicon import LEXICON, LexiconEmotionModel
 from dialog_emo_models.models.goemotions import (
     FYARONSKIY_DEBERTA_GOEMOTIONS,
@@ -28,6 +29,7 @@ from dialog_emo_models.models.sklearn_baselines import (
 __all__ = [
     "DummyEmotionModel",
     "EmotionModel",
+    "FastTextSupervisedEmotionModel",
     "FYARONSKIY_DEBERTA_GOEMOTIONS",
     "FyaronskiyDebertaGoEmotionsModel",
     "GOEMOTIONS_GROUPS",
