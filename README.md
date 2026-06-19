@@ -137,21 +137,40 @@ probabilities.
 
 ## Trainable Baselines
 
-Two sklearn baselines are available through `dialog-emo train`:
+These models train through `dialog-emo train` and share the same
+`fit(texts, labels)` / `predict_logits(texts)` contract, so they can all be
+trained on one full CSV and compared on one validation set:
 
-| training name | model | target handling | when to use |
+| training name | model | target handling | extra |
 | --- | --- | --- | --- |
-| `ridge-tfidf` | char n-gram TF-IDF + `Ridge` | learns log-probabilities from the six soft labels | first default for full CSV labels |
-| `logreg-tfidf` | char n-gram TF-IDF + `LogisticRegression` | trains on the strongest emotion per row | quick hard-label comparison |
+| `ridge-tfidf` | char n-gram TF-IDF + `Ridge` | learns log-probabilities from the six soft labels | — |
+| `logreg-tfidf` | char n-gram TF-IDF + `LogisticRegression` | trains on the strongest emotion per row | — |
+| `ridge-word-char-tfidf` | word + char TF-IDF union + `Ridge` | soft labels | — |
+| `logreg-word-char-tfidf` | word + char TF-IDF union + `LogisticRegression` | strongest emotion per row | — |
+| `fasttext-supervised` | native fastText with subword features | strongest emotion per row | `fasttext` |
+| `rubert-tiny2-finetune` | RuBERT-tiny2 fine-tuned classifier | strongest emotion per row | — |
 
 `ridge-tfidf` is the recommended first training baseline. It preserves the idea
 that labels are distributions, trains fast on small data, saves as `.joblib`,
-and still satisfies the same `EmotionModel` contract at inference time.
+and still satisfies the same `EmotionModel` contract at inference time. The
+`word-char` variants fuse word unigram/bigram and character n-gram features in a
+single `FeatureUnion`.
 
-CatBoost is a good next experiment, but it is not in the base dependency set
-yet. The intended shape is the same: train from full CSV, save under
-`artifacts/`, and expose `predict_logits(texts)` so the normal scorer can use
-it.
+`fasttext-supervised` carries an optional dependency; install it only when
+needed:
+
+```bash
+uv sync --extra fasttext   # native fastText
+```
+
+## Lexicon Baseline
+
+`lexicon` is a keyword-count dictionary baseline (no training). It is registered
+for inference and runs through the normal CLI:
+
+```bash
+uv run dialog-emo score --input output/parsed.csv --output output/scored.csv --model lexicon
+```
 
 ## HF GoEmotions Presets
 
