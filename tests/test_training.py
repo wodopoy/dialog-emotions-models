@@ -52,6 +52,7 @@ def test_trainable_registry_contains_linear_baselines() -> None:
         "logreg-word-char-tfidf",
         "ridge-tfidf",
         "ridge-word-char-tfidf",
+        "rubert-tiny2-finetune",
     ]
     assert isinstance(create_trainable_model("ridge-tfidf"), TfidfRidgeEmotionModel)
 

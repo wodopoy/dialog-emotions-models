@@ -25,6 +25,7 @@ from dialog_emo_models.models.sklearn_baselines import (
     TfidfLogRegEmotionModel,
     TfidfRidgeEmotionModel,
 )
+from dialog_emo_models.models.transformer import RuBertTiny2EmotionModel
 
 __all__ = [
     "DummyEmotionModel",
@@ -41,6 +42,7 @@ __all__ = [
     "MAXKAZAK_RUBERT_BASE_GOEMOTIONS",
     "MaxKazakRuBertBaseGoEmotionsModel",
     "ModelOutputError",
+    "RuBertTiny2EmotionModel",
     "SEARA_RUBERT_TINY2_GOEMOTIONS",
     "SearaRuBertTiny2GoEmotionsModel",
     "TfidfLogRegEmotionModel",

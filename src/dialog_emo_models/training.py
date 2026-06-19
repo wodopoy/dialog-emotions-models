@@ -11,6 +11,7 @@ from tqdm.auto import tqdm
 from dialog_emo_models.models import (
     EmotionModel,
     FastTextSupervisedEmotionModel,
+    RuBertTiny2EmotionModel,
     TfidfLogRegEmotionModel,
     TfidfRidgeEmotionModel,
 )
@@ -24,6 +25,7 @@ TRAINABLE_MODEL_REGISTRY: dict[str, TrainableModelFactory] = {
     "logreg-word-char-tfidf": lambda: TfidfLogRegEmotionModel(analyzer="word+char"),
     "ridge-word-char-tfidf": lambda: TfidfRidgeEmotionModel(analyzer="word+char"),
     "fasttext-supervised": FastTextSupervisedEmotionModel,
+    "rubert-tiny2-finetune": RuBertTiny2EmotionModel,
 }
 
 
