@@ -24,20 +24,32 @@ def _build_vectorizer(
     ngram_range: tuple[int, int],
     min_df: int,
     max_features: int | None,
+    sublinear_tf: bool = False,
 ):
     if analyzer == WORD_CHAR_ANALYZER:
+        # max_features caps the (large) char channel — the main size lever for
+        # the union; the word channel stays small on its own.
         return FeatureUnion(
             [
                 (
                     "word",
                     TfidfVectorizer(
-                        analyzer="word", ngram_range=(1, 2), min_df=1, lowercase=True
+                        analyzer="word",
+                        ngram_range=(1, 2),
+                        min_df=min_df,
+                        sublinear_tf=sublinear_tf,
+                        lowercase=True,
                     ),
                 ),
                 (
                     "char",
                     TfidfVectorizer(
-                        analyzer="char_wb", ngram_range=(3, 5), min_df=1, lowercase=True
+                        analyzer="char_wb",
+                        ngram_range=(3, 5),
+                        min_df=min_df,
+                        max_features=max_features,
+                        sublinear_tf=sublinear_tf,
+                        lowercase=True,
                     ),
                 ),
             ]
@@ -47,6 +59,7 @@ def _build_vectorizer(
         ngram_range=ngram_range,
         min_df=min_df,
         max_features=max_features,
+        sublinear_tf=sublinear_tf,
         lowercase=True,
     )
 
@@ -61,9 +74,12 @@ class TfidfRidgeEmotionModel(EmotionModel):
         ngram_range: tuple[int, int] = (3, 5),
         min_df: int = 1,
         max_features: int | None = 50_000,
+        sublinear_tf: bool = False,
         alpha: float = 1.0,
     ) -> None:
-        self.vectorizer = _build_vectorizer(analyzer, ngram_range, min_df, max_features)
+        self.vectorizer = _build_vectorizer(
+            analyzer, ngram_range, min_df, max_features, sublinear_tf
+        )
         self.estimator = Ridge(alpha=alpha)
         self._is_fitted = False
 
@@ -107,12 +123,17 @@ class TfidfLogRegEmotionModel(EmotionModel):
         ngram_range: tuple[int, int] = (3, 5),
         min_df: int = 1,
         max_features: int | None = 50_000,
+        sublinear_tf: bool = False,
         max_iter: int = 1_000,
+        C: float = 1.0,
         class_weight: str | None = "balanced",
     ) -> None:
-        self.vectorizer = _build_vectorizer(analyzer, ngram_range, min_df, max_features)
+        self.vectorizer = _build_vectorizer(
+            analyzer, ngram_range, min_df, max_features, sublinear_tf
+        )
         self.estimator = LogisticRegression(
             max_iter=max_iter,
+            C=C,
             class_weight=class_weight,
         )
         self._is_fitted = False
