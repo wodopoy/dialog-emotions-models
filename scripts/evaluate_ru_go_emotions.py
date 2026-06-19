@@ -5,18 +5,26 @@ from pathlib import Path
 from urllib.request import urlretrieve
 
 import joblib
-import numpy as np
 import pandas as pd
-from sklearn.metrics import f1_score
 from tqdm.auto import tqdm
 
+from dialog_emo_models.metrics import (
+    measure_latency_ms,
+    measure_load_time_ms,
+    model_size_mb,
+    quality_metrics,
+)
 from dialog_emo_models.models import (
     GOEMOTIONS_GROUPS,
     GOEMOTIONS_LABELS,
+    DummyEmotionModel,
+    FastTextSupervisedEmotionModel,
+    LabelPriorEmotionModel,
+    LexiconEmotionModel,
+    MajorityClassEmotionModel,
     TfidfLogRegEmotionModel,
     TfidfRidgeEmotionModel,
 )
-from dialog_emo_models.models.dummy import DummyEmotionModel
 from dialog_emo_models.schema import EMOTIONS
 from dialog_emo_models.training import train_from_full_frame
 
@@ -29,8 +37,13 @@ SPLIT_URLS = {
     "simplified/test-00000-of-00001-0acb4be83ca6567e.parquet",
 }
 
+# All light, deployable models + reference floors. Heavy transformers live
+# elsewhere; this harness is the comparable leaderboard for the light roster.
 MODEL_FACTORIES = {
     "dummy": DummyEmotionModel,
+    "majority": MajorityClassEmotionModel,
+    "prior": LabelPriorEmotionModel,
+    "lexicon": LexiconEmotionModel,
     "ridge-tfidf": TfidfRidgeEmotionModel,
     "logreg-tfidf": TfidfLogRegEmotionModel,
     "ridge-word-tfidf": lambda: TfidfRidgeEmotionModel(
@@ -39,11 +52,21 @@ MODEL_FACTORIES = {
     "logreg-word-tfidf": lambda: TfidfLogRegEmotionModel(
         analyzer="word", ngram_range=(1, 2), min_df=2, max_features=50_000, max_iter=500
     ),
+    "ridge-word-char-tfidf": lambda: TfidfRidgeEmotionModel(analyzer="word+char"),
+    "logreg-word-char-tfidf": lambda: TfidfLogRegEmotionModel(analyzer="word+char"),
+    "fasttext-supervised": FastTextSupervisedEmotionModel,
 }
+
+LEADERBOARD_COLUMNS = [
+    "model", "split", "n",
+    "primary_accuracy", "macro_f1", "weighted_f1", "micro_f1", "top1_hit",
+    "kl", "js", "mae", "mse", "ece",
+    "size_mb", "load_ms", "latency_p50_ms", "latency_p95_ms",
+]
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Evaluate small baselines on ru_go_emotions.")
+    parser = argparse.ArgumentParser(description="Benchmark light models on ru_go_emotions.")
     parser.add_argument(
         "--data-dir",
         type=Path,
@@ -52,7 +75,13 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("artifacts/experiments/ru-go-emotions-tfidf"),
+        default=Path("artifacts/experiments/light-leaderboard"),
+    )
+    parser.add_argument(
+        "--max-train-rows",
+        type=int,
+        default=None,
+        help="Subsample the train split for a quick smoke run.",
     )
     args = parser.parse_args()
 
@@ -64,21 +93,15 @@ def main() -> None:
     stats: dict[str, dict[str, int]] = {}
     for split in tqdm(("train", "validation", "test"), desc="convert splits", unit="split"):
         splits[split], stats[split] = _convert_split(args.data_dir / f"{split}.parquet")
-        splits[split].to_csv(args.output_dir / f"{split}.full.csv", index=False)
 
-    results = _evaluate(splits, args.output_dir)
-    stats_frame = pd.DataFrame(stats).T
-    stats_frame.to_csv(args.output_dir / "dataset_stats.csv")
+    results = _evaluate(splits, args.output_dir, max_train_rows=args.max_train_rows)
+    results = results.reindex(columns=LEADERBOARD_COLUMNS)
+    pd.DataFrame(stats).T.to_csv(args.output_dir / "dataset_stats.csv")
     results.to_csv(args.output_dir / "metrics.csv", index=False)
 
-    print("DATASET_STATS")
-    print(stats_frame.to_string())
-    print("\nCLASS_DISTRIBUTION")
-    for split_name, frame in splits.items():
-        counts = (frame.loc[:, EMOTIONS] > 0).sum(axis=0).astype(int).to_dict()
-        print(split_name, counts)
-    print("\nRESULTS")
-    print(results.sort_values(["split", "kl", "mae"]).to_string(index=False))
+    print("\nLEADERBOARD (validation, sorted by KL)")
+    view = results[results["split"] == "validation"].sort_values("kl")
+    print(view.to_string(index=False))
     print(f"\nARTIFACTS {args.output_dir}")
 
 
@@ -99,12 +122,7 @@ def _convert_split(path: Path) -> tuple[pd.DataFrame, dict[str, int]]:
     rows: list[dict[str, object]] = []
     dropped_unmapped = 0
     multi_group = 0
-    for _, row in tqdm(
-        raw.iterrows(),
-        total=len(raw),
-        desc=f"map {path.stem}",
-        unit="row",
-    ):
+    for _, row in raw.iterrows():
         groups = sorted(
             {
                 label_to_group[label_id_to_name[int(label_id)]]
@@ -117,7 +135,6 @@ def _convert_split(path: Path) -> tuple[pd.DataFrame, dict[str, int]]:
             continue
         if len(groups) > 1:
             multi_group += 1
-
         item: dict[str, object] = {
             "turn_index": len(rows),
             "timestamp": "",
@@ -138,72 +155,51 @@ def _convert_split(path: Path) -> tuple[pd.DataFrame, dict[str, int]]:
     return frame, stats
 
 
-def _evaluate(splits: dict[str, pd.DataFrame], output_dir: Path) -> pd.DataFrame:
-    runs: list[dict[str, object]] = []
+def _evaluate(
+    splits: dict[str, pd.DataFrame],
+    output_dir: Path,
+    *,
+    max_train_rows: int | None = None,
+) -> pd.DataFrame:
     train = splits["train"]
-    for model_name, factory in tqdm(
-        MODEL_FACTORIES.items(),
-        desc="train/evaluate models",
-        unit="model",
-    ):
-        print(f"TRAIN {model_name}", flush=True)
-        model = factory()
-        if model_name != "dummy":
-            model = train_from_full_frame(train, model, show_progress=True)
-            joblib.dump(model, output_dir / f"{model_name}.joblib")
+    if max_train_rows:
+        train = train.head(max_train_rows)
+    val_texts = splits["validation"]["text"].astype(str).tolist()
 
-        for split_name in tqdm(
-            ("validation", "test"),
-            desc=f"evaluate {model_name}",
-            unit="split",
-            leave=False,
-        ):
-            frame = splits[split_name]
-            proba = model.predict_proba(
-                frame["text"].astype(str).tolist(),
-                show_progress=True,
-            )
-            row: dict[str, object] = {
-                "model": model_name,
-                "split": split_name,
-                "n": int(len(frame)),
+    rows: list[dict[str, object]] = []
+    for model_name, factory in tqdm(MODEL_FACTORIES.items(), desc="models", unit="model"):
+        print(f"RUN {model_name}", flush=True)
+        try:
+            model = factory()
+            if model_name != "dummy":
+                model = train_from_full_frame(train, model, show_progress=False)
+            model_path = output_dir / f"{model_name}.joblib"
+            joblib.dump(model, model_path)
+
+            deploy: dict[str, float] = {
+                "size_mb": round(model_size_mb(model_path), 3),
+                "load_ms": round(measure_load_time_ms(lambda p=model_path: joblib.load(p)), 2),
             }
-            row.update(_metrics(_y_matrix(frame), proba))
-            runs.append(row)
+            deploy.update(
+                {key: round(value, 3) for key, value in measure_latency_ms(model, val_texts).items()}
+            )
 
-    results = pd.DataFrame(runs)
-    for column in ["top1_hit", "top1_primary_acc", "macro_f1_top1", "mae", "mse", "kl"]:
-        results[column] = results[column].round(4)
-    return results
+            for split_name in ("validation", "test"):
+                frame = splits[split_name]
+                proba = model.predict_proba(frame["text"].astype(str).tolist())
+                metrics = quality_metrics(frame.loc[:, EMOTIONS].to_numpy(dtype=float), proba)
+                row: dict[str, object] = {
+                    "model": model_name,
+                    "split": split_name,
+                    "n": int(len(frame)),
+                }
+                row.update({key: round(value, 4) for key, value in metrics.items()})
+                row.update(deploy)
+                rows.append(row)
+        except Exception as exc:  # keep the leaderboard partial-safe
+            print(f"SKIP {model_name}: {type(exc).__name__}: {exc}", flush=True)
 
-
-def _y_matrix(frame: pd.DataFrame) -> np.ndarray:
-    return frame.loc[:, EMOTIONS].to_numpy(dtype=float)
-
-
-def _metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
-    eps = 1e-12
-    y_pred = np.clip(y_pred, eps, 1.0)
-    y_pred = y_pred / y_pred.sum(axis=1, keepdims=True)
-    true_positive = y_true > 0
-    pred_top = y_pred.argmax(axis=1)
-    true_primary = y_true.argmax(axis=1)
-    pred_onehot = np.zeros_like(y_true, dtype=int)
-    pred_onehot[np.arange(len(pred_top)), pred_top] = 1
-    return {
-        "top1_hit": float(np.mean(true_positive[np.arange(len(pred_top)), pred_top])),
-        "top1_primary_acc": float(np.mean(pred_top == true_primary)),
-        "macro_f1_top1": float(
-            f1_score((y_true > 0).astype(int), pred_onehot, average="macro", zero_division=0)
-        ),
-        "mae": float(np.abs(y_true - y_pred).mean()),
-        "mse": float(((y_true - y_pred) ** 2).mean()),
-        "kl": float(
-            (y_true * (np.log(np.clip(y_true, eps, 1.0)) - np.log(y_pred)))
-            .sum(axis=1)
-            .mean()
-        ),
-    }
+    return pd.DataFrame(rows)
 
 
 if __name__ == "__main__":
