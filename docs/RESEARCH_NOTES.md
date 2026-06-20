@@ -449,3 +449,45 @@ anger 0.47, anxiety 0.46, **surprise 0.41** (P 0.50 / R 0.35, n=499).
 Итог: стандартный headline для мультикласса — accuracy + macro-F1; KL у нас — осознанно
 выбранный основной критерий именно для distribution/таймлайн-постановки, при полном наборе
 сопутствующих метрик.
+
+### Итерация 9 — большой параллельный HPO на rugo+cedr (7-класс)
+
+Прогон: `EMO_SCHEME=7 python scripts/tune_combined.py --k-scale 5 --workers 8`
+(1549 конфигов, 0 ошибок; параллельно через ProcessPoolExecutor, 1 BLAS-поток/воркер).
+Обучение на rugo+cedr (49.4k), CEDR-val вырезан из CEDR-train, отбор по сбалансированному
+RuGo+CEDR val KL, победители на обоих held-out тестах. Файл: `tune-combined/best_per_family.csv`.
+
+Лучшее по семействам (сорт по CEDR-test acc):
+
+| family | CEDR acc | RuGo acc | CEDR KL | RuGo KL | size MB | p50 ms |
+|---|---|---|---|---|---|---|
+| **logreg-char** | **0.722** | 0.584 | 0.824 | 1.063 | **2.70** | 0.264 |
+| logreg-union | 0.698 | 0.581 | 0.878 | 1.066 | 37.2 | 1.69 |
+| ridge-char | 0.674 | 0.576 | 1.159 | 1.455 | 9.1 | 0.50 |
+| fasttext | 0.674 | 0.529 | 1.029 | 1.376 | 5.8 | **0.030** |
+| nb | 0.668 | 0.548 | 0.938 | 1.191 | 2.85 | 0.251 |
+| ridge-union | 0.662 | 0.584 | 1.230 | 1.454 | 42.0 | 1.84 |
+| logreg-word | 0.597 | 0.553 | 1.113 | 1.157 | 10.3 | 0.43 |
+| ridge-word | 0.545 | 0.544 | 1.602 | 1.519 | 6.6 | 0.33 |
+| lexicon-learned | 0.540 | 0.523 | 1.436 | 1.452 | 0.04 | 0.012 |
+
+Победные параметры (для воспроизведения):
+- **logreg-char (рекомендуемый деплой):** char_wb, ngram (2,6), max_features=30000, min_df=1,
+  sublinear_tf, C=2.0, class_weight=None. → CEDR 0.722 / RuGo 0.584, 2.7 МБ, 0.26 ms.
+- **fasttext:** loss=ova, lr=0.1, epoch=15, dim=100, wordNgrams=1, minn=2/maxn=6. → CEDR 0.674,
+  5.8 МБ, 0.03 ms (самый быстрый).
+- **nb:** multinomial, char_wb (2,5), max_features=20000, min_df=5, alpha=0.3. → CEDR 0.668, 2.85 МБ.
+
+Выводы:
+- **`logreg-char` — победитель и деплой-выбор: CEDR 0.722 при 2.7 МБ / 0.26 ms.** Подтвердил
+  salvage-результат. Против domain adaptation (regime B, 0.699) перебор дал +2.3 п.п.
+- **fasttext сильно подрос:** CEDR 0.42→0.674 (нашёлся хороший конфиг: ova/lr=0.1/wordNgrams=1) —
+  и он самый маленький-быстрый; теперь это реальный кандидат, не только «по скорости».
+- `logreg-union` (0.698) хуже `logreg-char` И весит 37 МБ (его HPO-победитель без cap по
+  max_features раздулся) — отбрасываем, балласт.
+- ridge-семейство снова позади по KL/ECE — линейный logreg + NB рулят.
+
+Операционная заметка (параллелизм): нагрузка memory-bound (TF-IDF на 49k), а не CPU-bound;
+14 воркеров упёрлись в 48 ГБ RAM и ушли в своп (медленнее, чем 8-10). Плюс грабли: `pkill -f
+<script>.py` НЕ убивает spawn-воркеров (у них cmdline `multiprocessing.spawn`) — глушить по
+`pkill -f .venv/bin/python`. Рабочий оптимум здесь ~8-10 воркеров без свопа.
