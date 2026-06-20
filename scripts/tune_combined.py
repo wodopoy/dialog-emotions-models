@@ -194,6 +194,8 @@ def main() -> None:
     for family, (builder, k, space) in FAMILIES.items():
         for p in sample_configs(space, 3 if args.quick else int(round(k * args.k_scale)), rng):
             configs.append((family, builder, p))
+    # shuffle so a partial run still covers every family proportionally
+    configs = [configs[i] for i in rng.permutation(len(configs))]
     print(f"{len(configs)} configs | {args.workers} workers", flush=True)
 
     results: list[dict] = []
@@ -204,7 +206,7 @@ def main() -> None:
     ) as ex:
         for i, row in enumerate(tqdm(ex.map(_run_config, configs), total=len(configs), unit="cfg")):
             results.append(row)
-            if (i + 1) % 100 == 0:
+            if (i + 1) % 50 == 0:
                 pd.DataFrame(results).to_csv(ckpt, index=False)
     pd.DataFrame(results).to_csv(ckpt, index=False)
 
