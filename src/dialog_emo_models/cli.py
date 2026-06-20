@@ -3,8 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import joblib
-
+from dialog_emo_models.checkpoints import available_checkpoints, load_checkpoint
 from dialog_emo_models.models import EmotionModel
 from dialog_emo_models.pipeline import parse_telegram_json, score_parsed_frame
 from dialog_emo_models.registry import available_model_names, create_model
@@ -43,7 +42,18 @@ def _build_parser() -> argparse.ArgumentParser:
         "--model-path",
         type=Path,
         default=None,
-        help="Path to a saved joblib EmotionModel. Overrides --model.",
+        help="Path to a saved checkpoint (joblib file or model directory). Overrides --model.",
+    )
+    score_parser.add_argument(
+        "--checkpoint",
+        default=None,
+        help="Trained checkpoint name from artifacts/models (see `dialog-emo list`). Overrides --model.",
+    )
+    score_parser.add_argument(
+        "--models-dir",
+        type=Path,
+        default=None,
+        help="Checkpoint directory (default: ./artifacts/models or $DIALOG_EMO_MODELS_DIR)",
     )
     score_parser.set_defaults(func=_score_command)
 
@@ -66,9 +76,29 @@ def _build_parser() -> argparse.ArgumentParser:
         "--model-path",
         type=Path,
         default=None,
-        help="Path to a saved joblib EmotionModel. Overrides --model.",
+        help="Path to a saved checkpoint (joblib file or model directory). Overrides --model.",
+    )
+    run_parser.add_argument(
+        "--checkpoint",
+        default=None,
+        help="Trained checkpoint name from artifacts/models (see `dialog-emo list`). Overrides --model.",
+    )
+    run_parser.add_argument(
+        "--models-dir",
+        type=Path,
+        default=None,
+        help="Checkpoint directory (default: ./artifacts/models or $DIALOG_EMO_MODELS_DIR)",
     )
     run_parser.set_defaults(func=_run_command)
+
+    list_parser = subparsers.add_parser("list", help="List trained checkpoints in artifacts/models")
+    list_parser.add_argument(
+        "--models-dir",
+        type=Path,
+        default=None,
+        help="Checkpoint directory (default: ./artifacts/models or $DIALOG_EMO_MODELS_DIR)",
+    )
+    list_parser.set_defaults(func=_list_command)
 
     train_parser = subparsers.add_parser("train", help="Train a model from full CSV")
     train_parser.add_argument("--input", required=True, type=Path, help="Full scored CSV path")
@@ -92,7 +122,7 @@ def _parse_command(args: argparse.Namespace) -> None:
 
 def _score_command(args: argparse.Namespace) -> None:
     parsed = load_parsed_csv(args.input)
-    model = _load_model(args.model, args.model_path)
+    model = _load_model(args)
     scored = score_parsed_frame(parsed, model, show_progress=True)
     output = write_full_csv(scored, args.output)
     print(f"scored {len(scored)} rows with {_model_label(args)} -> {output}")
@@ -104,7 +134,7 @@ def _run_command(args: argparse.Namespace) -> None:
         parsed_output = write_parsed_csv(parsed, args.parsed_output)
         print(f"parsed {len(parsed)} rows -> {parsed_output}")
 
-    model = _load_model(args.model, args.model_path)
+    model = _load_model(args)
     scored = score_parsed_frame(parsed, model, show_progress=True)
     output = write_full_csv(scored, args.output)
     print(f"scored {len(scored)} rows with {_model_label(args)} -> {output}")
@@ -115,16 +145,34 @@ def _train_command(args: argparse.Namespace) -> None:
     print(f"trained {args.model!r} -> {args.output}")
 
 
-def _load_model(model_name: str, model_path: Path | None) -> EmotionModel:
-    if model_path is None:
-        return create_model(model_name)
-    model = joblib.load(model_path)
-    if not isinstance(model, EmotionModel):
-        raise TypeError(f"Expected saved EmotionModel, got {type(model).__name__}")
-    return model
+def _list_command(args: argparse.Namespace) -> None:
+    checkpoints = available_checkpoints(args.models_dir)
+    if not checkpoints:
+        print("no checkpoints found")
+        return
+    width = max(len(name) for name in checkpoints)
+    for name, path in sorted(checkpoints.items()):
+        kind = "dir" if path.is_dir() else "joblib"
+        print(f"{name:{width}}  {kind:6}  {path}")
+
+
+def _load_model(args: argparse.Namespace) -> EmotionModel:
+    # Unified loader: a named checkpoint or an explicit path (joblib OR directory)
+    # both go through load_checkpoint, which dispatches on the on-disk format.
+    if args.checkpoint is not None:
+        return load_checkpoint(args.checkpoint, models_dir=args.models_dir)
+    if args.model_path is not None:
+        return load_checkpoint(args.model_path, models_dir=args.models_dir)
+    return create_model(args.model)
 
 
 def _model_label(args: argparse.Namespace) -> str:
+    if args.checkpoint is not None:
+        return repr(args.checkpoint)
     if args.model_path is not None:
         return str(args.model_path)
     return repr(args.model)
+
+
+if __name__ == "__main__":
+    main()

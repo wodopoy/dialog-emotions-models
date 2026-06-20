@@ -75,6 +75,37 @@ uv run dialog-emo score \
   --model-path artifacts/ridge-tfidf.joblib
 ```
 
+### Trained checkpoints (unified loader)
+
+Every model saved under `artifacts/models/` — whatever its on-disk form —
+loads through one interface (`dialog_emo_models.checkpoints.load_checkpoint`),
+which dispatches on the format: `*.joblib` pickles, HuggingFace export
+directories (GoEmotions presets, aggregated into the project emotions), and the
+native `RuBERT-tiny2` fine-tune directory.
+
+```bash
+EMO_SCHEME=7 uv run dialog-emo list          # all checkpoints by clean name + kind
+
+# Score with any of them by name (joblib OR directory, transparently):
+EMO_SCHEME=7 uv run dialog-emo run \
+  --input data/result.json \
+  --output output/scored.csv \
+  --checkpoint rubert-tiny2-finetune          # or hf-seara-rubert-tiny2, logreg-union, ...
+```
+
+`--checkpoint NAME` resolves against `artifacts/models/` (override with
+`--models-dir` or `$DIALOG_EMO_MODELS_DIR`); `--model-path PATH` takes an explicit
+file or directory. The checkpoints are 7-class, so set `EMO_SCHEME=7`. The output
+CSV is exactly the column contract the `dialog-emo-demo` UI reads.
+
+```python
+from dialog_emo_models.checkpoints import available_checkpoints, load_checkpoint
+
+available_checkpoints()                       # {name: path}
+model = load_checkpoint("logreg-union")       # ready EmotionModel
+model.predict_proba(["я так рад тебя видеть"])
+```
+
 ## Data Contracts
 
 Parsed CSV, used as model input:
