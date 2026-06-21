@@ -105,6 +105,20 @@ NLL — родной критерий для KL, поэтому ожидаемо
    **хуже raw** (0.055 → 0.064). Рекомендация в пользу NLL ухудшила бы именно ту модель, что
    идёт в продакшн.
 
+## Иллюстрации
+
+ECE под raw / ECE-fit / NLL-fit по всем моделям, на обоих доменах: in-domain выигрывает
+ECE-fit (зелёное), кросс-доменно часто NLL-fit (красное), но на fastText/maxkazak NLL раздувает ECE.
+
+![ECE: fit by ECE vs by NLL](img/calibration/objective_ece_overview.png)
+
+Механизм на двух крайних случаях — где NLL помогает (DeBERTa, CEDR: 0.117→0.030) и где ломает
+(fastText: 0.016→0.089, T=1.42 уводит в недоуверенность):
+
+![reliability: ECE vs NLL](img/calibration/objective_reliability_mechanism.png)
+
+Строит `scripts/plot_objective_comparison.py`.
+
 ## Рекомендация для диплома
 
 **Записать ОБА (сравнение — самостоятельный результат), но продакшн-пайплайн оставить
