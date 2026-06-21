@@ -365,11 +365,13 @@ RuGo test + CEDR; reliability diagrams — `docs/img/calibration/`. Полный
   совокупности (но RuGo-перекошен ~85%, на CEDR ≈ T_rugo). Один скаляр не оптимален на всех трёх →
   для нативного деплоя калибровать на cedr_val, под смешанный вход — T_comb.
 - **ECE-fit vs NLL-fit (`scripts/calibrate_objective_comparison.py`, `docs/CALIBRATION_OBJECTIVE.md`):**
-  отбор T по ECE и по NLL, репорт ECE+KL на rugo/cedr test. In-domain ECE → ECE-fit (14/17);
-  **деплой-домен CEDR ECE → NLL-fit (12/17); KL → NLL-fit (14/17)**. NLL — гладкий proper scoring
-  rule, лучше переносится кросс-домен; патология — fasttext/maxkazak (ненастоящие логиты,
-  NLL пересмягчает). **Рекомендация: оба исследования в работу, продакшн — NLL-fit +
-  ECE-предохранитель** (откат к T=1, если val ECE хуже raw).
+  отбор T по ECE и по NLL, репорт ECE+KL на rugo/cedr test. Сырые счёта: in-domain ECE → ECE-fit
+  14/17, CEDR ECE → NLL-fit 12/17, KL → NLL-fit 14/17. **По размерам эффекта** значимый (>2·SE)
+  кросс-доменный выигрыш NLL — только у 3 моделей (tree-rf/deberta/lexicon-hand); для деплой-модели
+  `logreg-char` ECE-fit лучше (NLL ухудшает 0.055→0.064); NLL ломается на fasttext/maxkazak.
+  **Рекомендация (после адверсариальной верификации развернулась): оба в работу, но продакшн —
+  ECE+дедбанд** (когерентно с репортируемыми числами, безопасно, лучше на деплой-модели); NLL —
+  абляция.
 
 Примитивы: `apply_temperature` / `best_temperature(objective, min_improve)` /
 `negative_log_likelihood` / `reliability_curve` в `metrics.py`, тесты —

@@ -531,9 +531,10 @@ Argmax инвариантен, поэтому accuracy/F1 не меняются 
   CEDR ≈ T_rugo). Один скаляр не оптимален на всех трёх. Деплой нативный → калибровать на
   cedr_val; одна модель под смесь → T_comb.
 - **ECE-fit vs NLL-fit (`calibrate_objective_comparison.py`, `docs/CALIBRATION_OBJECTIVE.md`):**
-  фит T на rugo_val по ECE и по NLL, репорт ECE+KL на rugo_test/cedr_test, все модели. Итог:
-  in-domain ECE → ECE-fit (14/17); **CEDR (деплой) ECE → NLL-fit (12/17)**; **KL → NLL-fit
-  (14/17)**. NLL — гладкий proper scoring rule, меньше переобучается под бины, лучше переносится
-  кросс-домен (ridge-char CEDR 0.045→0.031, deberta 0.055→0.030). Исключение — патологичные
-  логиты: fasttext (ova, T_nll=1.42 → ECE 0.016→0.089), maxkazak (T_nll=20). **Рекомендация:
-  записать оба, продакшн — NLL-fit + ECE-предохранитель** (откат к T=1, если val ECE хуже raw).
+  фит T на rugo_val по ECE и по NLL, репорт ECE+KL на rugo_test/cedr_test. Сырые счёта: in-domain
+  ECE → ECE-fit 14/17; CEDR ECE → NLL-fit 12/17; KL → NLL-fit 14/17. **Но по размерам эффекта**
+  (SE: RuGo 0.005, CEDR 0.008): значимый (>2·SE) кросс-доменный выигрыш NLL — лишь у 3 моделей
+  (tree-rf, deberta, lexicon-hand), остальное ничьи; для деплой-модели logreg-char ECE-fit лучше
+  на 1.9·SE (NLL её ухудшает 0.055→0.064); NLL ломается на fasttext (T_nll=1.42→ECE 0.089) и
+  maxkazak. **Рекомендация (после верификации развернулась): записать оба, но продакшн оставить
+  ECE+дедбанд** (когерентно с числами, безопасно, лучше на деплой-модели); NLL — абляция.
