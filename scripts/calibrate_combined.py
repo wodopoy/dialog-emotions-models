@@ -3,8 +3,10 @@ report ECE on {rugo_test, cedr_test, rugo_test+cedr_test} for every checkpoint.
 
 CEDR ships no val split (only train, used for the weights, and test), so cedr_val
 is carved as one half of CEDR test and cedr_test is the other half — disjoint, and
-both held out from weight training. T is fit free (no deadband) so the dev-set
-effect is not masked. raw = T=1 baseline.
+both held out from weight training. Every dev-fit T uses the SAME deadband as the
+main pipeline (ε=0.005), so all columns share one policy: a model already calibrated
+on a dev set stays at T=1 there (its @T == raw) instead of chasing ECE noise. raw =
+T=1 baseline.
 
     python scripts/calibrate_combined.py
     python scripts/calibrate_combined.py --only logreg-char,ridge-char,fasttext --skip-heavy
@@ -59,6 +61,8 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts/experiments/calibration"))
     parser.add_argument("--skip-heavy", action="store_true")
     parser.add_argument("--only", type=str, default=None)
+    parser.add_argument("--min-improve", type=float, default=0.005,
+                        help="Deadband on each dev-fit T (same as main pipeline; 0 = free fit).")
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
     args.cedr_dir.mkdir(parents=True, exist_ok=True)
@@ -98,11 +102,13 @@ def main() -> None:
             del model
             gc.collect()
 
-            # Three dev-fit temperatures (free fit, no deadband).
-            t_rugo, _ = best_temperature(rval_l, rval_y, objective="ece")
-            t_cedr, _ = best_temperature(cval_l, cval_y, objective="ece")
+            # Three dev-fit temperatures, each with the main-pipeline deadband so all
+            # columns share one policy (no mixing raw=deadband-on with @T=deadband-off).
+            mi = args.min_improve
+            t_rugo, _ = best_temperature(rval_l, rval_y, objective="ece", min_improve=mi)
+            t_cedr, _ = best_temperature(cval_l, cval_y, objective="ece", min_improve=mi)
             t_comb, _ = best_temperature(
-                np.vstack([rval_l, cval_l]), np.vstack([rval_y, cval_y]), objective="ece")
+                np.vstack([rval_l, cval_l]), np.vstack([rval_y, cval_y]), objective="ece", min_improve=mi)
             temps = {"raw": 1.0, "Trugo": t_rugo, "Tcedr": t_cedr, "Tcomb": t_comb}
 
             # Three test domains, including the combined (rugo_test + cedr_test).
