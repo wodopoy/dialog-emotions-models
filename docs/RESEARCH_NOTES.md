@@ -497,9 +497,10 @@ RuGo+CEDR val KL, победители на обоих held-out тестах. Ф
 ## Итерация 10 — температурная калибровка (по ECE)
 
 Пост-хок temperature scaling всех 20 чекпоинтов. T подобран per-model на val RuGo по ECE
-(контроль — по NLL, совпадает), «до/после» — на held-out RuGo test + CEDR. Argmax инвариантен,
-поэтому accuracy/F1 не меняются — калибровка бесплатна. Полный разбор: `docs/CALIBRATION.md`,
-данные: `artifacts/experiments/calibration/temperature_calibration.csv`.
+(контроль — по NLL, совпадает) с дедбандом ε=0.005, «до/после» — на held-out RuGo test + CEDR.
+Argmax инвариантен, поэтому accuracy/F1 не меняются — калибровка бесплатна. Полный разбор
+(+ reliability diagrams, объяснение «роста» ECE): `docs/CALIBRATION.md`, данные:
+`artifacts/experiments/calibration/`, картинки: `docs/img/calibration/`.
 
 | модель | T* | RuGo ECE до→после | CEDR ECE до→после |
 | --- | --- | --- | --- |
@@ -508,14 +509,18 @@ RuGo+CEDR val KL, победители на обоих held-out тестах. Ф
 | ridge-union | 2.37 | 0.255 → 0.026 | 0.189 → 0.049 |
 | hf-fyaronskiy-deberta | 1.63 | 0.140 → 0.027 | 0.117 → 0.055 |
 | rubert-tiny2-finetune | 1.18 | 0.054 → 0.013 | 0.026 → 0.076 |
-| logreg-char | 0.98 | 0.028 → 0.032 | 0.055 → 0.049 |
-| fasttext | 0.98 | 0.016 → 0.017 | 0.110 → 0.104 |
+| logreg-char | 1.00 | 0.028 → 0.028 | 0.055 → 0.055 |
+| fasttext | 1.00 | 0.016 → 0.016 | 0.110 → 0.110 |
 
 Выводы:
 - **Переуверенные лечатся бесплатно:** ridge-семейство 0.26→0.03 и пресет maxkazak 0.39→0.01
   in-domain, T≈2.3–4.0, accuracy без изменений.
-- **Деплой `logreg-char` калиброван из коробки** (ECE 0.028, T≈1) — менять не нужно.
+- **Деплой `logreg-char` калиброван из коробки** (ECE 0.028) — дедбанд держит T=1, менять нечего.
+- **Дедбанд ε=0.005:** без него у уже калиброванных (logreg-char, fasttext, tree-hgb) RuGo ECE
+  чуть *рос* — val-минимум по ECE это шум, не переносится на test (T(ECE)=0.98 против
+  T(NLL)=1.03–1.42, разнонаправленно). Порог лёг в ~6× разрыв val-выигрышей → отделяет реальные
+  коррекции от шума.
 - **Калибровка доменно-зависима:** in-domain T переносится на CEDR у переуверенных, но у уже
-  калиброванных (fasttext, rubert-finetune) RuGo-T может слегка ухудшить CEDR; нативный dev
+  калиброванных (fasttext, rubert-finetune) RuGo-T CEDR не лечит/ухудшает; нативный dev
   (oracle T) закрывает разрыв (fasttext CEDR 0.110→0.020).
 - Отбор по ECE ≈ отбор по NLL → не «подгонка под бины».

@@ -64,6 +64,40 @@ def quality_metrics(
     }
 
 
+def reliability_curve(
+    y_true: NDArray[np.float64],
+    y_pred: NDArray[np.float64],
+    *,
+    n_bins: int = 10,
+) -> dict[str, NDArray[np.float64]]:
+    """Per-bin top-label reliability data — the source of truth for ECE and its plot.
+
+    Bins the predictions by top-label confidence into ``n_bins`` equal-width
+    ``(low, high]`` buckets and returns, per bin, the mean confidence, the empirical
+    accuracy (how often the top label is the true primary), and the count. Empty
+    bins carry ``nan`` for confidence/accuracy and ``0`` for count. A reliability
+    diagram plots `accuracy` against `confidence`; ECE is the count-weighted mean
+    gap between them.
+    """
+    true = _as_distribution(y_true)
+    pred = _as_distribution(y_pred)
+    confidence = pred.max(axis=1)
+    correct = (pred.argmax(axis=1) == true.argmax(axis=1)).astype(float)
+    edges = np.linspace(0.0, 1.0, n_bins + 1)
+    centers = 0.5 * (edges[:-1] + edges[1:])
+    conf = np.full(n_bins, np.nan)
+    acc = np.full(n_bins, np.nan)
+    counts = np.zeros(n_bins, dtype=int)
+    for index, (low, high) in enumerate(zip(edges[:-1], edges[1:])):
+        in_bin = (confidence > low) & (confidence <= high)
+        count = int(in_bin.sum())
+        counts[index] = count
+        if count:
+            conf[index] = float(confidence[in_bin].mean())
+            acc[index] = float(correct[in_bin].mean())
+    return {"edges": edges, "centers": centers, "confidence": conf, "accuracy": acc, "counts": counts}
+
+
 def expected_calibration_error(
     y_true: NDArray[np.float64],
     y_pred: NDArray[np.float64],
@@ -71,18 +105,14 @@ def expected_calibration_error(
     n_bins: int = 10,
 ) -> float:
     """Top-label expected calibration error: |confidence - accuracy| over bins."""
-    true = _as_distribution(y_true)
-    pred = _as_distribution(y_pred)
-    confidence = pred.max(axis=1)
-    correct = (pred.argmax(axis=1) == true.argmax(axis=1)).astype(float)
-    edges = np.linspace(0.0, 1.0, n_bins + 1)
-    ece = 0.0
-    for low, high in zip(edges[:-1], edges[1:]):
-        in_bin = (confidence > low) & (confidence <= high)
-        count = int(in_bin.sum())
-        if count:
-            ece += abs(confidence[in_bin].mean() - correct[in_bin].mean()) * count / len(confidence)
-    return float(ece)
+    curve = reliability_curve(y_true, y_pred, n_bins=n_bins)
+    counts = curve["counts"]
+    total = int(counts.sum())
+    if total == 0:
+        return 0.0
+    gaps = np.abs(curve["confidence"] - curve["accuracy"])
+    gaps = np.where(counts > 0, gaps, 0.0)
+    return float((gaps * counts).sum() / total)
 
 
 # --- temperature calibration ----------------------------------------------
@@ -130,6 +160,7 @@ def best_temperature(
     *,
     objective: str = "ece",
     grid: NDArray[np.float64] | Sequence[float] | None = None,
+    min_improve: float = 0.0,
 ) -> tuple[float, float]:
     """Scalar temperature minimizing `objective` of ``softmax(logits / T)`` vs `y_true`.
 
@@ -137,23 +168,37 @@ def best_temperature(
     ``"nll"`` (soft cross-entropy, the textbook smooth surrogate). The sweep runs
     over cached `logits`, so it is just a handful of softmaxes per candidate `T`.
     Ties are broken toward `T` closest to 1.0 — the least distortion of the
-    original scores. Returns ``(T*, best_objective_value)``.
+    original scores.
+
+    `min_improve` is a deadband: keep ``T = 1`` unless the best candidate beats the
+    objective *at* ``T = 1`` by at least this much. Binned ECE is a noisy finite-sample
+    statistic, so for an already-calibrated model its validation minimum sits a hair
+    below ``T = 1`` purely by sampling noise — a "win" that does not transfer to test.
+    A small deadband (e.g. 0.005 on ECE) leaves such models alone and only departs
+    from ``T = 1`` for corrections large enough to be real. Returns ``(T*, value@T*)``.
     """
+    if objective not in ("ece", "nll"):
+        raise ValueError(f"objective must be 'ece' or 'nll', got {objective!r}")
     candidates = np.geomspace(0.5, 20.0, 160) if grid is None else np.asarray(grid, dtype=float)
     true = _as_distribution(y_true)
+
+    def score_at(temperature: float) -> float:
+        probs = apply_temperature(logits, temperature)
+        if objective == "nll":
+            return negative_log_likelihood(true, probs)
+        return expected_calibration_error(true, probs)
+
     best_t, best_score = 1.0, float("inf")
     for temperature in candidates:
-        probs = apply_temperature(logits, float(temperature))
-        if objective == "nll":
-            score = negative_log_likelihood(true, probs)
-        elif objective == "ece":
-            score = expected_calibration_error(true, probs)
-        else:
-            raise ValueError(f"objective must be 'ece' or 'nll', got {objective!r}")
+        score = score_at(float(temperature))
         better = score < best_score - 1e-12
         tie_closer = abs(score - best_score) <= 1e-12 and abs(temperature - 1.0) < abs(best_t - 1.0)
         if better or tie_closer:
             best_t, best_score = float(temperature), float(score)
+
+    baseline = score_at(1.0)
+    if baseline - best_score < min_improve:
+        return 1.0, baseline
     return best_t, best_score
 
 

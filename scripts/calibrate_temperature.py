@@ -82,6 +82,10 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts/experiments/calibration"))
     parser.add_argument("--skip-heavy", action="store_true")
     parser.add_argument("--only", type=str, default=None, help="Comma-separated checkpoint names")
+    parser.add_argument(
+        "--min-improve", type=float, default=0.005,
+        help="Deadband: keep T=1 unless val ECE improves by at least this much (default 0.005).",
+    )
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
     args.cedr_dir.mkdir(parents=True, exist_ok=True)
@@ -115,8 +119,9 @@ def main() -> None:
             del model
             gc.collect()
 
-            # T fit on RuGo validation: primary by ECE, cross-check by NLL.
-            t_ece, _ = best_temperature(val_logits, val_y, objective="ece")
+            # T fit on RuGo validation: primary by ECE (with a deadband so already-
+            # calibrated models keep T=1 instead of chasing ECE noise), NLL as cross-check.
+            t_ece, _ = best_temperature(val_logits, val_y, objective="ece", min_improve=args.min_improve)
             t_nll, _ = best_temperature(val_logits, val_y, objective="nll")
             # Optimistic CEDR ceiling: T fit directly on the CEDR eval set.
             t_cedr, _ = best_temperature(cedr_logits, cedr_y, objective="ece")

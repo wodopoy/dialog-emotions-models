@@ -343,19 +343,26 @@ class_weight=None`. (Перебор дал +2.3 п.п. к domain-adaptation 0.69
 
 Пост-хок temperature scaling всех 20 чекпоинтов: один скаляр T делит логиты до softmax,
 argmax инвариантен → accuracy/F1 не меняются (калибровка бесплатна). T подобран per-model на
-val RuGo по ECE (контроль по NLL — совпадает), «до/после» — на held-out RuGo test + CEDR.
-Полный разбор — `docs/CALIBRATION.md`, данные — `artifacts/experiments/calibration/`.
+val RuGo по ECE (контроль по NLL — совпадает) с дедбандом ε = 0.005, «до/после» — на held-out
+RuGo test + CEDR; reliability diagrams — `docs/img/calibration/`. Полный разбор —
+`docs/CALIBRATION.md`, данные — `artifacts/experiments/calibration/`.
 
 - **Переуверенные лечатся бесплатно:** семейство `ridge` ECE 0.26 → 0.03, пресет `maxkazak`
   0.39 → 0.01 in-domain (T ≈ 2.3–4.0), accuracy без изменений.
-- **Деплой `logreg-char` калиброван из коробки** (ECE 0.028, T ≈ 1) — не требует температуры.
+- **Деплой `logreg-char` калиброван из коробки** (ECE 0.028) — дедбанд держит T = 1.
+- **Дедбанд ε = 0.005:** без него у уже калиброванных моделей (`logreg-char`, `fasttext`,
+  `tree-hgb`) RuGo ECE чуть *рос* — val-минимум по ECE это сэмплинг-шум, не переносится на test
+  (T(ECE) = 0.98 против T(NLL) = 1.03–1.42, разнонаправленно). Порог лёг в фактический ~6× разрыв
+  между переносимыми и шумовыми выигрышами по val ECE.
 - **Калибровка доменно-зависима:** in-domain T переносится на CEDR у переуверенных, но у уже
-  калиброванных (`fasttext`, `rubert-finetune`) RuGo-T может слегка ухудшить CEDR; нативный dev
+  калиброванных (`fasttext`, `rubert-finetune`) RuGo-T CEDR не лечит/ухудшает; нативный dev
   (oracle T) закрывает разрыв (`fasttext` CEDR 0.110 → 0.020).
 - Отбор по ECE ≈ отбор по NLL → не подгонка под бины.
 
-Примитивы: `apply_temperature` / `best_temperature` / `negative_log_likelihood` в
-`metrics.py`, тесты — `tests/test_calibration.py`, прогон — `scripts/calibrate_temperature.py`.
+Примитивы: `apply_temperature` / `best_temperature(objective, min_improve)` /
+`negative_log_likelihood` / `reliability_curve` в `metrics.py`, тесты —
+`tests/test_calibration.py`, прогон — `scripts/calibrate_temperature.py`, картинки —
+`scripts/plot_reliability.py`.
 
 ---
 
