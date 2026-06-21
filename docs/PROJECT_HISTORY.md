@@ -364,7 +364,12 @@ RuGo test + CEDR; reliability diagrams — `docs/img/calibration/`. Полный
   `deberta` 0.104 → 0.021, `logreg-char` 0.067 → 0.033), `T_comb` — лучший компромисс на
   совокупности (но RuGo-перекошен ~85%, на CEDR ≈ T_rugo). Один скаляр не оптимален на всех трёх →
   для нативного деплоя калибровать на cedr_val, под смешанный вход — T_comb.
-- Отбор по ECE ≈ отбор по NLL → не подгонка под бины.
+- **ECE-fit vs NLL-fit (`scripts/calibrate_objective_comparison.py`, `docs/CALIBRATION_OBJECTIVE.md`):**
+  отбор T по ECE и по NLL, репорт ECE+KL на rugo/cedr test. In-domain ECE → ECE-fit (14/17);
+  **деплой-домен CEDR ECE → NLL-fit (12/17); KL → NLL-fit (14/17)**. NLL — гладкий proper scoring
+  rule, лучше переносится кросс-домен; патология — fasttext/maxkazak (ненастоящие логиты,
+  NLL пересмягчает). **Рекомендация: оба исследования в работу, продакшн — NLL-fit +
+  ECE-предохранитель** (откат к T=1, если val ECE хуже raw).
 
 Примитивы: `apply_temperature` / `best_temperature(objective, min_improve)` /
 `negative_log_likelihood` / `reliability_curve` в `metrics.py`, тесты —

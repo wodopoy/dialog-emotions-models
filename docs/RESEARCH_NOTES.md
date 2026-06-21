@@ -530,4 +530,10 @@ Argmax инвариантен, поэтому accuracy/F1 не меняются 
   0.067→0.033), `T_comb`→совокупность (и лучший единый компромисс, но RuGo-перекошен ~85%, на
   CEDR ≈ T_rugo). Один скаляр не оптимален на всех трёх. Деплой нативный → калибровать на
   cedr_val; одна модель под смесь → T_comb.
-- Отбор по ECE ≈ отбор по NLL → не «подгонка под бины».
+- **ECE-fit vs NLL-fit (`calibrate_objective_comparison.py`, `docs/CALIBRATION_OBJECTIVE.md`):**
+  фит T на rugo_val по ECE и по NLL, репорт ECE+KL на rugo_test/cedr_test, все модели. Итог:
+  in-domain ECE → ECE-fit (14/17); **CEDR (деплой) ECE → NLL-fit (12/17)**; **KL → NLL-fit
+  (14/17)**. NLL — гладкий proper scoring rule, меньше переобучается под бины, лучше переносится
+  кросс-домен (ridge-char CEDR 0.045→0.031, deberta 0.055→0.030). Исключение — патологичные
+  логиты: fasttext (ova, T_nll=1.42 → ECE 0.016→0.089), maxkazak (T_nll=20). **Рекомендация:
+  записать оба, продакшн — NLL-fit + ECE-предохранитель** (откат к T=1, если val ECE хуже raw).
