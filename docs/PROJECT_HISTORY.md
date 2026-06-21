@@ -357,11 +357,13 @@ RuGo test + CEDR; reliability diagrams — `docs/img/calibration/`. Полный
 - **Калибровка доменно-зависима:** in-domain T переносится на CEDR у переуверенных, но у уже
   калиброванных (`fasttext`, `rubert-finetune`) RuGo-T CEDR не лечит/ухудшает; нативный dev
   (oracle T) закрывает разрыв (`fasttext` CEDR 0.110 → 0.020).
-- **Выбор dev-набора (`scripts/calibrate_combined.py`):** натуральная «совокупность» RuGo+CEDR
-  ≈ RuGo (RuGo val давит CEDR ~6:1 — целевой сигнал тонет), деплой-домен не чинит. Целевой
-  `T_cedr` (на held-out CEDR-сплите) реально снижает CEDR ECE (`logreg-char` 0.067 → 0.033,
-  `fasttext` 0.123 → 0.026, `deberta` 0.104 → 0.021), ценой RuGo — один скаляр не оптимален для
-  обоих доменов. Для нативного деплоя калибровать на целевом dev, не на RuGo/совокупности.
+- **Полная матрица dev×test (`scripts/calibrate_combined.py`):** T на {rugo_val, cedr_val,
+  rugo_val+cedr_val} оценивается на {rugo_test, cedr_test, совокупность}, все 20 моделей
+  (cedr_val = половина CEDR test, cedr_test = вторая, непересекающиеся). Закономерность:
+  **лучший dev = домен оценки.** `T_cedrval` сильно чинит CEDR (`fasttext` 0.123 → 0.026,
+  `deberta` 0.104 → 0.021, `logreg-char` 0.067 → 0.033), `T_comb` — лучший компромисс на
+  совокупности (но RuGo-перекошен ~85%, на CEDR ≈ T_rugo). Один скаляр не оптимален на всех трёх →
+  для нативного деплоя калибровать на cedr_val, под смешанный вход — T_comb.
 - Отбор по ECE ≈ отбор по NLL → не подгонка под бины.
 
 Примитивы: `apply_temperature` / `best_temperature(objective, min_improve)` /

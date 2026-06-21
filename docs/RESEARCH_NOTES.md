@@ -523,9 +523,11 @@ Argmax инвариантен, поэтому accuracy/F1 не меняются 
 - **Калибровка доменно-зависима:** in-domain T переносится на CEDR у переуверенных, но у уже
   калиброванных (fasttext, rubert-finetune) RuGo-T CEDR не лечит/ухудшает; нативный dev
   (oracle T) закрывает разрыв (fasttext CEDR 0.110→0.020).
-- **Выбор dev-набора (`calibrate_combined.py`, CEDR test разрезан 50/50 calib/report):**
-  натуральная «совокупность» ≈ RuGo (RuGo val давит CEDR ~6:1, целевой сигнал тонет) → CEDR не
-  чинит. Целевой `T_cedr` реально чинит деплой-домен (logreg-char CEDR 0.067→0.033, fasttext
-  0.123→0.026, deberta 0.104→0.021), ценой RuGo (один скаляр не оптимален для обоих доменов).
-  Вывод: для нативного деплоя калибровать на целевом dev, не на RuGo/совокупности.
+- **Полная матрица dev×test (`calibrate_combined.py`):** T на {rugo_val, cedr_val,
+  rugo_val+cedr_val} × оценка на {rugo_test, cedr_test, совокупность}, все модели (cedr_val =
+  половина CEDR test, cedr_test = вторая). Закономерность: **лучший dev = домен оценки.**
+  `T_rugoval`→RuGo, `T_cedrval`→CEDR (fasttext 0.123→0.026, deberta 0.104→0.021, logreg-char
+  0.067→0.033), `T_comb`→совокупность (и лучший единый компромисс, но RuGo-перекошен ~85%, на
+  CEDR ≈ T_rugo). Один скаляр не оптимален на всех трёх. Деплой нативный → калибровать на
+  cedr_val; одна модель под смесь → T_comb.
 - Отбор по ECE ≈ отбор по NLL → не «подгонка под бины».

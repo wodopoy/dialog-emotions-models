@@ -1,22 +1,10 @@
-"""Does the calibration dev-set choice matter? RuGo-only vs CEDR-only vs combined.
+"""Full dev-set comparison: fit T on {rugo_val, cedr_val, rugo_val+cedr_val},
+report ECE on {rugo_test, cedr_test, rugo_test+cedr_test} for every checkpoint.
 
-The main calibration (`calibrate_temperature.py`) fits T on RuGo validation, because
-that is the only labelled split held out from weight training — CEDR ships only
-train (used for the weights) and test (no val). But the 7-class checkpoints are
-trained on RuGo+CEDR and deployed on native Russian, so calibrating T on the RuGo
-(translationese) marginal alone is a domain mismatch — and indeed the RuGo-fit T
-transfers imperfectly to CEDR.
-
-This script answers the question honestly with a held-out CEDR split: CEDR test is
-cut 50/50 into a `calib` half (used to fit T) and a `report` half (used to score),
-so T-fit and reporting never overlap. For each model it fits three temperatures —
-
-* `T_rugo`     : RuGo val               (in-domain only, the current default)
-* `T_cedr`     : CEDR calib half        (target domain only)
-* `T_combined` : RuGo val + CEDR calib  (matches the RuGo+CEDR training mixture)
-
-— and reports ECE on held-out RuGo test and the held-out CEDR report half under each.
-Fit is free (no deadband) so the dev-set effect is not masked.
+CEDR ships no val split (only train, used for the weights, and test), so cedr_val
+is carved as one half of CEDR test and cedr_test is the other half — disjoint, and
+both held out from weight training. T is fit free (no deadband) so the dev-set
+effect is not masked. raw = T=1 baseline.
 
     python scripts/calibrate_combined.py
     python scripts/calibrate_combined.py --only logreg-char,ridge-char,fasttext --skip-heavy
@@ -38,7 +26,7 @@ import pandas as pd
 
 from dialog_emo_models.checkpoints import available_checkpoints, load_checkpoint
 from dialog_emo_models.datasets import load_cedr, load_rugoemotions
-from dialog_emo_models.metrics import apply_temperature, best_temperature, quality_metrics
+from dialog_emo_models.metrics import apply_temperature, best_temperature, expected_calibration_error
 
 CEDR_URL = ("https://huggingface.co/datasets/sagteam/cedr_v1/resolve/"
             "refs%2Fconvert%2Fparquet/main/test/0000.parquet")
@@ -46,25 +34,25 @@ HEAVY = {
     "rubert-tiny2-finetune", "hf-seara-rubert-tiny2",
     "hf-fyaronskiy-deberta", "hf-maxkazak-rubert-base", "tree-rf",
 }
-COLUMNS = [
-    "model", "kind", "T_rugo", "T_cedr", "T_combined",
-    "rugo_ece_raw", "rugo_ece_Trugo", "rugo_ece_Tcedr", "rugo_ece_Tcomb",
-    "cedr_ece_raw", "cedr_ece_Trugo", "cedr_ece_Tcedr", "cedr_ece_Tcomb",
+# Per test domain: raw + ECE under each of the three dev-fit temperatures.
+TESTS = ("rugo", "cedr", "all")
+DEVS = ("raw", "Trugo", "Tcedr", "Tcomb")
+COLUMNS = ["model", "kind", "T_rugoval", "T_cedrval", "T_comb"] + [
+    f"{t}_{d}" for t in TESTS for d in DEVS
 ]
 
 
-def _ece(y: np.ndarray, logits: np.ndarray, t: float) -> float:
-    return quality_metrics(y, apply_temperature(logits, t))["ece"]
+def _ece(logits: np.ndarray, y: np.ndarray, t: float) -> float:
+    return round(expected_calibration_error(y, apply_temperature(logits, t)), 4)
 
 
-def _split_indices(n: int, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
+def _split(n: int, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
     order = np.random.default_rng(seed).permutation(n)
-    half = n // 2
-    return order[:half], order[half:]
+    return order[: n // 2], order[n // 2:]
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Compare calibration dev-set choices.")
+    parser = argparse.ArgumentParser(description="Compare calibration dev-set choices (3x3 matrix).")
     parser.add_argument("--data-dir", type=Path, default=Path("artifacts/datasets/ru_go_emotions/simplified"))
     parser.add_argument("--cedr-dir", type=Path, default=Path("artifacts/datasets/cedr"))
     parser.add_argument("--models-dir", type=Path, default=None)
@@ -75,18 +63,17 @@ def main() -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     args.cedr_dir.mkdir(parents=True, exist_ok=True)
 
-    val_x, val_y = load_rugoemotions(args.data_dir / "validation.parquet")
-    test_x, test_y = load_rugoemotions(args.data_dir / "test.parquet")
+    rval_x, rval_y = load_rugoemotions(args.data_dir / "validation.parquet")
+    rtest_x, rtest_y = load_rugoemotions(args.data_dir / "test.parquet")
     cedr_path = args.cedr_dir / "test.parquet"
     if not cedr_path.exists():
         urlretrieve(CEDR_URL, cedr_path)
     cedr_x, cedr_y = load_cedr(cedr_path)
-    calib_idx, report_idx = _split_indices(len(cedr_x))
-    cc_x = [cedr_x[i] for i in calib_idx]
-    cc_y = cedr_y[calib_idx]
-    cr_x = [cedr_x[i] for i in report_idx]
-    cr_y = cedr_y[report_idx]
-    print(f"rugo val={len(val_x)} test={len(test_x)} | cedr calib={len(cc_x)} report={len(cr_x)}", flush=True)
+    cval_idx, ctest_idx = _split(len(cedr_x))
+    cval_x, cval_y = [cedr_x[i] for i in cval_idx], cedr_y[cval_idx]
+    ctest_x, ctest_y = [cedr_x[i] for i in ctest_idx], cedr_y[ctest_idx]
+    print(f"DEV  rugo_val={len(rval_x)}  cedr_val={len(cval_x)}  (rugo+cedr={len(rval_x)+len(cval_x)})", flush=True)
+    print(f"TEST rugo_test={len(rtest_x)}  cedr_test={len(ctest_x)}  (all={len(rtest_x)+len(ctest_x)})", flush=True)
 
     checkpoints = available_checkpoints(args.models_dir)
     if args.only:
@@ -104,44 +91,47 @@ def main() -> None:
             model = load_checkpoint(name, models_dir=args.models_dir)
             if hasattr(model, "temperature"):
                 model.temperature = 1.0
-            vl = np.asarray(model.predict_logits(val_x), dtype=float)
-            tl = np.asarray(model.predict_logits(test_x), dtype=float)
-            ccl = np.asarray(model.predict_logits(cc_x), dtype=float)
-            crl = np.asarray(model.predict_logits(cr_x), dtype=float)
+            rval_l = np.asarray(model.predict_logits(rval_x), dtype=float)
+            rtest_l = np.asarray(model.predict_logits(rtest_x), dtype=float)
+            cval_l = np.asarray(model.predict_logits(cval_x), dtype=float)
+            ctest_l = np.asarray(model.predict_logits(ctest_x), dtype=float)
             del model
             gc.collect()
 
-            t_rugo, _ = best_temperature(vl, val_y, objective="ece")
-            t_cedr, _ = best_temperature(ccl, cc_y, objective="ece")
-            # Combined dev = RuGo val + CEDR calib, stacked at natural sizes (≈ training mix).
-            comb_logits = np.vstack([vl, ccl])
-            comb_y = np.vstack([val_y, cc_y])
-            t_comb, _ = best_temperature(comb_logits, comb_y, objective="ece")
+            # Three dev-fit temperatures (free fit, no deadband).
+            t_rugo, _ = best_temperature(rval_l, rval_y, objective="ece")
+            t_cedr, _ = best_temperature(cval_l, cval_y, objective="ece")
+            t_comb, _ = best_temperature(
+                np.vstack([rval_l, cval_l]), np.vstack([rval_y, cval_y]), objective="ece")
+            temps = {"raw": 1.0, "Trugo": t_rugo, "Tcedr": t_cedr, "Tcomb": t_comb}
 
-            rows.append({
-                "model": name, "kind": "heavy" if name in HEAVY else "light",
-                "T_rugo": round(t_rugo, 3), "T_cedr": round(t_cedr, 3), "T_combined": round(t_comb, 3),
-                "rugo_ece_raw": round(_ece(test_y, tl, 1.0), 4),
-                "rugo_ece_Trugo": round(_ece(test_y, tl, t_rugo), 4),
-                "rugo_ece_Tcedr": round(_ece(test_y, tl, t_cedr), 4),
-                "rugo_ece_Tcomb": round(_ece(test_y, tl, t_comb), 4),
-                "cedr_ece_raw": round(_ece(cr_y, crl, 1.0), 4),
-                "cedr_ece_Trugo": round(_ece(cr_y, crl, t_rugo), 4),
-                "cedr_ece_Tcedr": round(_ece(cr_y, crl, t_cedr), 4),
-                "cedr_ece_Tcomb": round(_ece(cr_y, crl, t_comb), 4),
-            })
-            r = rows[-1]
+            # Three test domains, including the combined (rugo_test + cedr_test).
+            test_logits = {
+                "rugo": (rtest_l, rtest_y),
+                "cedr": (ctest_l, ctest_y),
+                "all": (np.vstack([rtest_l, ctest_l]), np.vstack([rtest_y, ctest_y])),
+            }
+            row = {"model": name, "kind": "heavy" if name in HEAVY else "light",
+                   "T_rugoval": round(t_rugo, 3), "T_cedrval": round(t_cedr, 3), "T_comb": round(t_comb, 3)}
+            for tname, (lg, y) in test_logits.items():
+                for dname, t in temps.items():
+                    row[f"{tname}_{dname}"] = _ece(lg, y, t)
+            rows.append(row)
             print(f"  T rugo/cedr/comb = {t_rugo:.2f}/{t_cedr:.2f}/{t_comb:.2f} | "
-                  f"CEDR ECE raw {r['cedr_ece_raw']} -> Trugo {r['cedr_ece_Trugo']} / "
-                  f"Tcomb {r['cedr_ece_Tcomb']} / Tcedr {r['cedr_ece_Tcedr']}", flush=True)
+                  f"cedr_test ECE raw {row['cedr_raw']} -> Trugo {row['cedr_Trugo']} "
+                  f"Tcomb {row['cedr_Tcomb']} Tcedr {row['cedr_Tcedr']}", flush=True)
         except Exception as exc:  # noqa: BLE001
             print(f"  SKIP {name}: {type(exc).__name__}: {exc}", flush=True)
 
-    frame = pd.DataFrame(rows).reindex(columns=COLUMNS).sort_values("cedr_ece_raw", ascending=False)
+    frame = pd.DataFrame(rows).reindex(columns=COLUMNS).sort_values("cedr_raw", ascending=False)
     csv_path = args.output_dir / "calibration_devset_comparison.csv"
     frame.to_csv(csv_path, index=False)
-    print("\nDEV-SET COMPARISON (CEDR report ECE; raw ECE descending)")
-    print(frame.to_string(index=False))
+
+    pd.set_option("display.width", 200)
+    for tname, title in (("rugo", "RuGo test"), ("cedr", "CEDR test"), ("all", "Combined test (rugo+cedr)")):
+        cols = ["model", "T_rugoval", "T_cedrval", "T_comb"] + [f"{tname}_{d}" for d in DEVS]
+        print(f"\n=== {title}: ECE under each dev-fit T ===")
+        print(frame[cols].to_string(index=False))
     print(f"\nARTIFACTS {csv_path}")
 
 
