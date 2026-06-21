@@ -59,6 +59,9 @@ COLUMNS = [
     "acc_rugo", "rugo_ece_raw", "rugo_ece_cal", "rugo_kl_raw", "rugo_kl_cal",
     "acc_cedr", "cedr_ece_raw", "cedr_ece_cal", "cedr_kl_raw", "cedr_kl_cal",
     "cedr_T_oracle", "cedr_ece_oracle",
+    # Deadband diagnostic (free = no deadband): makes the "ECE rose / 6x-gap" argument
+    # reproducible. val_gain_free = val_ece_raw - val_ece_free; transfer sign = test_ece_free vs rugo_ece_raw.
+    "T_ece_free", "val_ece_raw", "val_ece_free", "val_gain_free", "test_ece_free",
 ]
 
 
@@ -123,6 +126,11 @@ def main() -> None:
             # calibrated models keep T=1 instead of chasing ECE noise), NLL as cross-check.
             t_ece, _ = best_temperature(val_logits, val_y, objective="ece", min_improve=args.min_improve)
             t_nll, _ = best_temperature(val_logits, val_y, objective="nll")
+            # Free (no-deadband) ECE fit: exposes the noise gain the deadband suppresses.
+            t_free, _ = best_temperature(val_logits, val_y, objective="ece", min_improve=0.0)
+            val_ece_raw = _at(val_y, val_logits, 1.0)["ece"]
+            val_ece_free = _at(val_y, val_logits, t_free)["ece"]
+            test_ece_free = _at(test_y, test_logits, t_free)["ece"]
             # Optimistic CEDR ceiling: T fit directly on the CEDR eval set.
             t_cedr, _ = best_temperature(cedr_logits, cedr_y, objective="ece")
 
@@ -142,6 +150,10 @@ def main() -> None:
                 "cedr_ece_raw": round(cedr_raw["ece"], 4), "cedr_ece_cal": round(cedr_cal["ece"], 4),
                 "cedr_kl_raw": round(cedr_raw["kl"], 4), "cedr_kl_cal": round(cedr_cal["kl"], 4),
                 "cedr_T_oracle": round(t_cedr, 3), "cedr_ece_oracle": round(cedr_orc["ece"], 4),
+                "T_ece_free": round(t_free, 3),
+                "val_ece_raw": round(val_ece_raw, 4), "val_ece_free": round(val_ece_free, 4),
+                "val_gain_free": round(val_ece_raw - val_ece_free, 4),
+                "test_ece_free": round(test_ece_free, 4),
             })
             print(f"  T*={t_ece} rugo_ece {rugo_raw['ece']:.3f}->{rugo_cal['ece']:.3f} "
                   f"cedr_ece {cedr_raw['ece']:.3f}->{cedr_cal['ece']:.3f}", flush=True)

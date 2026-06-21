@@ -2,7 +2,7 @@
 
 Two families:
 
-- Quality metrics on soft distributions `y_true`, `y_pred` of shape `(n, 6)`:
+- Quality metrics on soft distributions `y_true`, `y_pred` of shape `(n, len(EMOTIONS))`:
   hard top-1 metrics (accuracy, F1), distribution metrics (MAE, MSE, KL, JS),
   calibration (ECE), per-class F1, and the confusion matrix.
 - Deployment metrics: on-disk size, load time, single-message latency.
@@ -179,7 +179,10 @@ def best_temperature(
     """
     if objective not in ("ece", "nll"):
         raise ValueError(f"objective must be 'ece' or 'nll', got {objective!r}")
-    candidates = np.geomspace(0.5, 20.0, 160) if grid is None else np.asarray(grid, dtype=float)
+    # Include T=1 exactly so the no-op is a real candidate (else the nearest grid node
+    # ~0.98 stands in for it and any reported sub-1 T could be a grid artifact).
+    default_grid = np.union1d(np.geomspace(0.5, 20.0, 160), [1.0])
+    candidates = default_grid if grid is None else np.asarray(grid, dtype=float)
     true = _as_distribution(y_true)
 
     def score_at(temperature: float) -> float:
