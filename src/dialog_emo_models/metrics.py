@@ -85,6 +85,78 @@ def expected_calibration_error(
     return float(ece)
 
 
+# --- temperature calibration ----------------------------------------------
+
+
+def _softmax(logits: NDArray[np.float64]) -> NDArray[np.float64]:
+    shifted = logits - logits.max(axis=1, keepdims=True)
+    exps = np.exp(shifted)
+    return exps / exps.sum(axis=1, keepdims=True)
+
+
+def apply_temperature(
+    logits: NDArray[np.float64],
+    temperature: float,
+) -> NDArray[np.float64]:
+    """Softmax of pre-softmax `logits` divided by a scalar `temperature`.
+
+    ``T > 1`` softens the distribution (lower confidence), ``T < 1`` sharpens it,
+    ``T = 1`` is a no-op. The argmax — and therefore accuracy, F1, the confusion
+    matrix — is invariant under any positive `T`; only the probabilities (and so
+    KL, NLL, ECE) move. This is the single knob of temperature scaling
+    (Guo et al., 2017), applied uniformly to any model via its `predict_logits`.
+    """
+    return _softmax(np.asarray(logits, dtype=float) / float(temperature))
+
+
+def negative_log_likelihood(
+    y_true: NDArray[np.float64],
+    y_pred: NDArray[np.float64],
+) -> float:
+    """Soft-label cross-entropy ``-sum p log q`` averaged over rows.
+
+    This is the textbook objective temperature scaling minimizes; for one-hot
+    labels it reduces to the usual NLL, and it differs from `kl` only by the
+    (T-independent) entropy of `y_true`, so minimizing it also minimizes KL.
+    """
+    true = _as_distribution(y_true)
+    pred = _as_distribution(y_pred)
+    return float(-(true * np.log(pred)).sum(axis=1).mean())
+
+
+def best_temperature(
+    logits: NDArray[np.float64],
+    y_true: NDArray[np.float64],
+    *,
+    objective: str = "ece",
+    grid: NDArray[np.float64] | Sequence[float] | None = None,
+) -> tuple[float, float]:
+    """Scalar temperature minimizing `objective` of ``softmax(logits / T)`` vs `y_true`.
+
+    `objective` is ``"ece"`` (top-label calibration error, the reported target) or
+    ``"nll"`` (soft cross-entropy, the textbook smooth surrogate). The sweep runs
+    over cached `logits`, so it is just a handful of softmaxes per candidate `T`.
+    Ties are broken toward `T` closest to 1.0 — the least distortion of the
+    original scores. Returns ``(T*, best_objective_value)``.
+    """
+    candidates = np.geomspace(0.5, 20.0, 160) if grid is None else np.asarray(grid, dtype=float)
+    true = _as_distribution(y_true)
+    best_t, best_score = 1.0, float("inf")
+    for temperature in candidates:
+        probs = apply_temperature(logits, float(temperature))
+        if objective == "nll":
+            score = negative_log_likelihood(true, probs)
+        elif objective == "ece":
+            score = expected_calibration_error(true, probs)
+        else:
+            raise ValueError(f"objective must be 'ece' or 'nll', got {objective!r}")
+        better = score < best_score - 1e-12
+        tie_closer = abs(score - best_score) <= 1e-12 and abs(temperature - 1.0) < abs(best_t - 1.0)
+        if better or tie_closer:
+            best_t, best_score = float(temperature), float(score)
+    return best_t, best_score
+
+
 def per_class_f1(
     y_true: NDArray[np.float64],
     y_pred: NDArray[np.float64],

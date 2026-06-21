@@ -339,13 +339,34 @@ class_weight=None`. (Перебор дал +2.3 п.п. к domain-adaptation 0.69
 
 ---
 
+## 10а. Температурная калибровка (по ECE) — итерация 10
+
+Пост-хок temperature scaling всех 20 чекпоинтов: один скаляр T делит логиты до softmax,
+argmax инвариантен → accuracy/F1 не меняются (калибровка бесплатна). T подобран per-model на
+val RuGo по ECE (контроль по NLL — совпадает), «до/после» — на held-out RuGo test + CEDR.
+Полный разбор — `docs/CALIBRATION.md`, данные — `artifacts/experiments/calibration/`.
+
+- **Переуверенные лечатся бесплатно:** семейство `ridge` ECE 0.26 → 0.03, пресет `maxkazak`
+  0.39 → 0.01 in-domain (T ≈ 2.3–4.0), accuracy без изменений.
+- **Деплой `logreg-char` калиброван из коробки** (ECE 0.028, T ≈ 1) — не требует температуры.
+- **Калибровка доменно-зависима:** in-domain T переносится на CEDR у переуверенных, но у уже
+  калиброванных (`fasttext`, `rubert-finetune`) RuGo-T может слегка ухудшить CEDR; нативный dev
+  (oracle T) закрывает разрыв (`fasttext` CEDR 0.110 → 0.020).
+- Отбор по ECE ≈ отбор по NLL → не подгонка под бины.
+
+Примитивы: `apply_temperature` / `best_temperature` / `negative_log_likelihood` в
+`metrics.py`, тесты — `tests/test_calibration.py`, прогон — `scripts/calibrate_temperature.py`.
+
+---
+
 ## 11. Отложено / не сделано (не «поверхностные» улучшения)
 
 - Квантизация трансформера (ONNX INT8) для реального деплоя.
 - Прогон на реальном телефоне (vs desktop-прокси латентности).
 - Размеченные данные **целевого домена** (телефонные диалоги) — публичных нет; лучший ROI.
 - XED-Russian как второй кросс-доменный тест (на HF нет, TSV в GitHub).
-- Формальная секция limitations / threats-to-validity, графики калибровки/Pareto.
+- Формальная секция limitations / threats-to-validity, графики надёжности (reliability
+  diagrams) / Pareto. Числа калибровки готовы (см. §10а), осталось нарисовать диаграммы.
 - Встраивание `logreg-char` в `dialog-emo-demo-codex` (с surprise в UI).
 
 ---

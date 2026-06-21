@@ -491,3 +491,31 @@ RuGo+CEDR val KL, победители на обоих held-out тестах. Ф
 14 воркеров упёрлись в 48 ГБ RAM и ушли в своп (медленнее, чем 8-10). Плюс грабли: `pkill -f
 <script>.py` НЕ убивает spawn-воркеров (у них cmdline `multiprocessing.spawn`) — глушить по
 `pkill -f .venv/bin/python`. Рабочий оптимум здесь ~8-10 воркеров без свопа.
+
+---
+
+## Итерация 10 — температурная калибровка (по ECE)
+
+Пост-хок temperature scaling всех 20 чекпоинтов. T подобран per-model на val RuGo по ECE
+(контроль — по NLL, совпадает), «до/после» — на held-out RuGo test + CEDR. Argmax инвариантен,
+поэтому accuracy/F1 не меняются — калибровка бесплатна. Полный разбор: `docs/CALIBRATION.md`,
+данные: `artifacts/experiments/calibration/temperature_calibration.csv`.
+
+| модель | T* | RuGo ECE до→после | CEDR ECE до→после |
+| --- | --- | --- | --- |
+| hf-maxkazak-rubert-base | 4.04 | 0.388 → 0.014 | 0.235 → 0.164 |
+| ridge-char | 2.31 | 0.257 → 0.025 | 0.186 → 0.045 |
+| ridge-union | 2.37 | 0.255 → 0.026 | 0.189 → 0.049 |
+| hf-fyaronskiy-deberta | 1.63 | 0.140 → 0.027 | 0.117 → 0.055 |
+| rubert-tiny2-finetune | 1.18 | 0.054 → 0.013 | 0.026 → 0.076 |
+| logreg-char | 0.98 | 0.028 → 0.032 | 0.055 → 0.049 |
+| fasttext | 0.98 | 0.016 → 0.017 | 0.110 → 0.104 |
+
+Выводы:
+- **Переуверенные лечатся бесплатно:** ridge-семейство 0.26→0.03 и пресет maxkazak 0.39→0.01
+  in-domain, T≈2.3–4.0, accuracy без изменений.
+- **Деплой `logreg-char` калиброван из коробки** (ECE 0.028, T≈1) — менять не нужно.
+- **Калибровка доменно-зависима:** in-domain T переносится на CEDR у переуверенных, но у уже
+  калиброванных (fasttext, rubert-finetune) RuGo-T может слегка ухудшить CEDR; нативный dev
+  (oracle T) закрывает разрыв (fasttext CEDR 0.110→0.020).
+- Отбор по ECE ≈ отбор по NLL → не «подгонка под бины».
