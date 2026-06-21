@@ -2,15 +2,20 @@ from __future__ import annotations
 
 import json
 
+import joblib
+import numpy as np
 import pytest
 
 from dialog_emo_models.checkpoints import (
     CHECKPOINT_SUFFIX,
+    TEMPERATURES_FILE,
     CheckpointError,
     _is_pathlike,
     _resolve_path,
     available_checkpoints,
+    load_checkpoint,
 )
+from dialog_emo_models.models import CalibratedEmotionModel, DummyEmotionModel
 
 
 def _make_models_dir(tmp_path):
@@ -70,3 +75,42 @@ def test_resolve_unknown_name_raises(tmp_path):
     models = _make_models_dir(tmp_path)
     with pytest.raises(CheckpointError, match="Unknown checkpoint"):
         _resolve_path("does-not-exist", models)
+
+
+def _toy_models_dir(tmp_path, temperature):
+    joblib.dump(DummyEmotionModel(), tmp_path / "toy.joblib")
+    (tmp_path / TEMPERATURES_FILE).write_text(json.dumps({"toy": temperature}), encoding="utf-8")
+    return tmp_path
+
+
+def test_calibrated_wrapper_scales_logits():
+    inner = DummyEmotionModel()
+    texts = ["привет", "пока"]
+    assert np.allclose(
+        CalibratedEmotionModel(inner, 2.0).predict_logits(texts), inner.predict_logits(texts) / 2.0
+    )
+    assert np.allclose(
+        CalibratedEmotionModel(inner, 1.0).predict_logits(texts), inner.predict_logits(texts)
+    )
+
+
+def test_load_checkpoint_applies_baked_temperature(tmp_path):
+    models = _toy_models_dir(tmp_path, temperature=2.5)
+    calibrated = load_checkpoint("toy", models_dir=models)
+    assert isinstance(calibrated, CalibratedEmotionModel) and calibrated.temperature == 2.5
+
+    raw = load_checkpoint("toy", models_dir=models, apply_temperature=False)
+    assert isinstance(raw, DummyEmotionModel)
+
+    texts = ["раз", "два", "три"]
+    assert np.allclose(calibrated.predict_logits(texts), raw.predict_logits(texts) / 2.5)
+
+
+def test_load_checkpoint_skips_wrap_when_temperature_is_one(tmp_path):
+    models = _toy_models_dir(tmp_path, temperature=1.0)
+    assert isinstance(load_checkpoint("toy", models_dir=models), DummyEmotionModel)
+
+
+def test_load_checkpoint_without_sidecar_is_raw(tmp_path):
+    joblib.dump(DummyEmotionModel(), tmp_path / "toy.joblib")
+    assert isinstance(load_checkpoint("toy", models_dir=tmp_path), DummyEmotionModel)

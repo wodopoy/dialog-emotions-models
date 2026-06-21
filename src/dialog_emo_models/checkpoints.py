@@ -18,15 +18,22 @@ explicitly with a precise error rather than failing deep inside scoring.
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
-from dialog_emo_models.models import EmotionModel
+from dialog_emo_models.models import CalibratedEmotionModel, EmotionModel
 from dialog_emo_models.schema import EMOTIONS
 
 # ``{stem}{CHECKPOINT_SUFFIX}.joblib`` registers as ``{stem}``, e.g.
 # ``logreg-union-7class-rugo-cedr.joblib`` -> ``logreg-union``.
 CHECKPOINT_SUFFIX = "-7class-rugo-cedr"
+
+# Sidecar in the models dir: ``{clean name: calibrated temperature}``. Written by
+# ``scripts/bake_temperatures.py`` and applied automatically on load, so scoring a
+# dialogue uses the fitted T without anyone passing it by hand. Reversible: delete
+# the file (or pass ``apply_temperature=False``) to get raw, uncalibrated logits.
+TEMPERATURES_FILE = "temperatures.json"
 
 
 class CheckpointError(RuntimeError):
@@ -111,6 +118,18 @@ def _resolve_path(name_or_path: str | Path, models_dir: str | Path | None) -> Pa
     raise CheckpointError(f"Unknown checkpoint {name!r} in {base}. Available: {known}")
 
 
+def _temperature_for(path: Path) -> float:
+    """Calibrated temperature for the checkpoint at ``path`` (1.0 if none recorded)."""
+    sidecar = path.parent / TEMPERATURES_FILE
+    if not sidecar.exists():
+        return 1.0
+    try:
+        table = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return 1.0
+    return float(table.get(_clean_name(path.stem), 1.0))
+
+
 def _load_dir(path: Path) -> EmotionModel:
     """Load a directory checkpoint, dispatching on its on-disk format."""
     if (path / "metadata.json").exists():
@@ -133,8 +152,15 @@ def load_checkpoint(
     name_or_path: str | Path,
     *,
     models_dir: str | Path | None = None,
+    apply_temperature: bool = True,
 ) -> EmotionModel:
-    """Load any saved checkpoint by clean name (or path) into an ``EmotionModel``."""
+    """Load any saved checkpoint by clean name (or path) into an ``EmotionModel``.
+
+    With ``apply_temperature`` (the default) the calibrated temperature recorded in
+    the sidecar ``temperatures.json`` is applied automatically — the returned model
+    scores with its fitted T. Pass ``apply_temperature=False`` to get the raw model
+    (used by the calibration scripts that re-fit T themselves).
+    """
     path = _resolve_path(name_or_path, models_dir)
     _check_scheme_for(path)
     if path.is_dir():
@@ -148,12 +174,21 @@ def load_checkpoint(
         raise CheckpointError(
             f"{path} did not load an EmotionModel (got {type(model).__name__})"
         )
+
+    if not apply_temperature:
+        # Unwrap if the artifact itself is calibrated, so callers get raw logits.
+        return model.model if isinstance(model, CalibratedEmotionModel) else model
+
+    temperature = _temperature_for(path)
+    if temperature != 1.0 and not isinstance(model, CalibratedEmotionModel):
+        return CalibratedEmotionModel(model, temperature)
     return model
 
 
 __all__ = [
     "CHECKPOINT_SUFFIX",
     "CheckpointError",
+    "TEMPERATURES_FILE",
     "available_checkpoints",
     "load_checkpoint",
 ]

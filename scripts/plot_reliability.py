@@ -70,7 +70,7 @@ def _reliability_panel(ax, y, probs, *, title: str, color: str) -> None:
 
 
 def plot_model(name: str, val, eval_split, split_name: str, min_improve: float, out: Path) -> None:
-    model = load_checkpoint(name)
+    model = load_checkpoint(name, apply_temperature=False)
     if hasattr(model, "temperature"):
         model.temperature = 1.0
     vx, vy = val

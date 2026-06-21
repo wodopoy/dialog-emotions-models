@@ -4,6 +4,7 @@ from dialog_emo_models.models.base import (
     logits_to_probabilities,
     validate_logits,
 )
+from dialog_emo_models.models.calibrated import CalibratedEmotionModel
 from dialog_emo_models.models.baselines import (
     LabelPriorEmotionModel,
     MajorityClassEmotionModel,
@@ -40,6 +41,7 @@ from dialog_emo_models.models.sklearn_extra import (
 from dialog_emo_models.models.transformer import RuBertTiny2EmotionModel
 
 __all__ = [
+    "CalibratedEmotionModel",
     "DummyEmotionModel",
     "EmotionModel",
     "FastTextSupervisedEmotionModel",

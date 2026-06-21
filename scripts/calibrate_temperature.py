@@ -115,7 +115,7 @@ def main() -> None:
     for name in order:
         print(f"RUN {name}", flush=True)
         try:
-            model = load_checkpoint(name, models_dir=args.models_dir)
+            model = load_checkpoint(name, models_dir=args.models_dir, apply_temperature=False)
             val_logits = _logits(model, val_x)
             test_logits = _logits(model, test_x)
             cedr_logits = _logits(model, cedr_x)

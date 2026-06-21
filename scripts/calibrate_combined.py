@@ -92,7 +92,7 @@ def main() -> None:
     for name in order:
         print(f"RUN {name}", flush=True)
         try:
-            model = load_checkpoint(name, models_dir=args.models_dir)
+            model = load_checkpoint(name, models_dir=args.models_dir, apply_temperature=False)
             if hasattr(model, "temperature"):
                 model.temperature = 1.0
             rval_l = np.asarray(model.predict_logits(rval_x), dtype=float)
