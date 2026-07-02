@@ -22,5 +22,5 @@ def test_run_command_writes_parsed_and_scored_csv(tmp_path) -> None:
         ]
     )
 
-    assert len(load_parsed_csv(parsed_path)) == 346
-    assert len(load_full_csv(scored_path)) == 346
+    assert len(load_parsed_csv(parsed_path)) == 20
+    assert len(load_full_csv(scored_path)) == 20

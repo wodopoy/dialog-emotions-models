@@ -14,14 +14,14 @@ from dialog_emo_models.registry import create_model
 from dialog_emo_models.schema import EMOTIONS, load_full_csv, write_full_csv
 
 
-def test_real_fixture_scores_with_dummy_model(tmp_path) -> None:
+def test_bundled_fixture_scores_with_dummy_model(tmp_path) -> None:
     parsed = parse_telegram_json(Path("data/result.json"))
     scored = score_parsed_frame(parsed, create_model("dummy"))
     output = write_full_csv(scored, tmp_path / "scored.csv")
 
     loaded = load_full_csv(output)
 
-    assert len(loaded) == 346
+    assert len(loaded) == 20
     assert list(loaded.columns) == [
         "turn_index",
         "timestamp",
@@ -30,7 +30,7 @@ def test_real_fixture_scores_with_dummy_model(tmp_path) -> None:
         *EMOTIONS,
     ]
     for emotion in EMOTIONS:
-        assert loaded[emotion].iloc[0] == pytest.approx(1 / 6)
+        assert loaded[emotion].iloc[0] == pytest.approx(1 / len(EMOTIONS))
 
 
 def test_score_parsed_frame_softmaxes_logits() -> None:
