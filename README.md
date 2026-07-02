@@ -6,7 +6,8 @@ pipeline. This is the experimental codebase of the bachelor's thesis
 «Исследование и разработка методов локального определения эмоциональной окраски
 текстовых сообщений в мобильных системах» (МФТИ, 2026). The visualisation side
 lives in the sibling
-[dialog-emotions-demo](https://github.com/wodopoy/dialog-emotions-demo).
+[dialog-emotions-demo](https://github.com/wodopoy/dialog-emotions-demo)
+(live on [Hugging Face Spaces](https://huggingface.co/spaces/wodopoy/dialog-emotion-timeline)).
 
 The stable boundary between the two:
 
