@@ -95,6 +95,10 @@ uv run ruff check .
 
 ## CLI
 
+`data/result.json` is a small synthetic Telegram-export fixture (the same
+hand-authored dialogue as the demo's bundled sample); the examples below and
+the tests use it. No real conversations are stored in this repository.
+
 Parse Telegram Desktop JSON into the model input format:
 
 ```bash
